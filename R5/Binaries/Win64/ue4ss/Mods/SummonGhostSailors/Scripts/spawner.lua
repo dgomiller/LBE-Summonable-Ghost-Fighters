@@ -245,6 +245,74 @@ function Spawner.Spawn(classPath, label, compositeLook)
 end
 
 --------------------------------------------------------------------
+-- Opacity tuning — EXPERIMENTAL (2026-08-26), untested. LivingBase's own history confirms
+-- comp:CreateDynamicMaterialInstance (the component-level UFUNCTION) crashes this game
+-- natively, twice — this deliberately calls a DIFFERENT function instead,
+-- UKismetMaterialLibrary:CreateDynamicMaterialInstance (a library call, not a component
+-- method), so the actual crashing call is never made; only the already-proven-safe
+-- comp:SetMaterial is used to attach the result. Still a first-ever attempt at a dynamic
+-- material instance from THIS mod, so treat any failure as informative, not a bug to chase.
+--
+-- LivingBase's own FModel export of this exact material found 4 VECTOR color params
+-- (AltColor/MaxStabilityColor/MinStabilityColor/InstabilityColor) blended by a hidden
+-- "stability" value — no confirmed scalar "Opacity" param. This tries several plausible
+-- scalar names (in case one exists but was never catalogued) AND falls back to nudging the
+-- alpha channel of those same 4 color params (common for a Translucent material to read
+-- opacity from a color's own alpha) — logging exactly what succeeded so the real answer is
+-- known after one test, not guessed twice.
+--------------------------------------------------------------------
+local function getKismetMaterialLibrary()
+    local o = StaticFindObject("/Script/Engine.Default__KismetMaterialLibrary")
+    if o and o:IsValid() then return o end
+    return nil
+end
+
+local function tryOpacityInstance(mat, opacity)
+    local lib = getKismetMaterialLibrary()
+    if not lib then
+        always("[ghost-opacity] KismetMaterialLibrary unavailable — keeping fixed-look material.")
+        return nil
+    end
+    local world = UEHelpers.GetWorld()
+    local dyn
+    local ok, err = pcall(function()
+        dyn = lib:CreateDynamicMaterialInstance(world, mat, "GhostSailorMat")
+    end)
+    if not ok or not (dyn and dyn:IsValid()) then
+        always("[ghost-opacity] CreateDynamicMaterialInstance failed (" .. tostring(err) .. ") — keeping fixed-look material.")
+        return nil
+    end
+    always("[ghost-opacity] dynamic instance created — trying to set opacity=" .. tostring(opacity))
+
+    local anyScalarOk = false
+    for _, pname in ipairs(Config.GHOST_OPACITY_SCALAR_NAMES) do
+        if pcall(function() dyn:SetScalarParameterValue(pname, opacity) end) then
+            anyScalarOk = true
+            log("[ghost-opacity] scalar '" .. pname .. "' set ok")
+        end
+    end
+
+    local anyVectorOk = false
+    for _, pname in ipairs(Config.GHOST_COLOR_PARAM_NAMES) do
+        local cur
+        local okGet = pcall(function() cur = dyn:K2_GetVectorParameterValue(pname) end)
+        if okGet and cur then
+            local newColor = { R = cur.R, G = cur.G, B = cur.B, A = opacity }
+            if pcall(function() dyn:SetVectorParameterValue(pname, newColor) end) then
+                anyVectorOk = true
+                log("[ghost-opacity] vector '" .. pname .. "' alpha set ok (RGB preserved)")
+            end
+        end
+    end
+
+    if not anyScalarOk and not anyVectorOk then
+        always("[ghost-opacity] no known opacity parameter matched — material may not expose one (or isn't Translucent at all). Using fixed-look material.")
+        return nil
+    end
+    return dyn
+end
+
+--------------------------------------------------------------------
 -- Ghost material — same MI_Building_SimplifiedPreview swap LivingBase's ApplyGhostMaterial
 -- uses, parameterized on the passed-in actor instead of a dev-probe global.
 --------------------------------------------------------------------
@@ -255,6 +323,13 @@ function Spawner.ApplyGhostMaterial(actor)
         always("[ghost] could not resolve ghost material: " .. Config.GHOST_MAT_PATH)
         return false
     end
+
+    local appliedMat = mat
+    if Config.GHOST_OPACITY and Config.GHOST_OPACITY < 1.0 then
+        local dyn = tryOpacityInstance(mat, Config.GHOST_OPACITY)
+        if dyn then appliedMat = dyn end
+    end
+
     local touched = 0
     local function applyTo(comp)
         pcall(function() if comp ~= nil and type(comp) == "userdata" and comp.get then comp = comp:get() end end)
@@ -262,7 +337,7 @@ function Spawner.ApplyGhostMaterial(actor)
         local n = 0
         pcall(function() n = comp:GetNumMaterials() end)
         for slot = 0, (n - 1) do
-            if pcall(function() comp:SetMaterial(slot, mat) end) then touched = touched + 1 end
+            if pcall(function() comp:SetMaterial(slot, appliedMat) end) then touched = touched + 1 end
         end
     end
     pcall(function() applyTo(actor.Mesh) end)
@@ -283,7 +358,8 @@ function Spawner.ApplyGhostMaterial(actor)
             end
         end
     end
-    log(string.format("[ghost] applied to %d material slot(s)", touched))
+    log(string.format("[ghost] applied to %d material slot(s) (%s)", touched,
+        appliedMat == mat and "fixed look" or "dynamic, opacity-tuned"))
     return touched > 0
 end
 

@@ -48,7 +48,11 @@ local function summon()
     end)
 end
 
-local keyValue = Key and Key[Config.SUMMON_KEY]
+-- VK_OEM_5 (0xDC) is the raw Windows virtual-key code for backslash, kept as a fallback in
+-- case a future UE4SS build's Key[] table doesn't carry "OEM_FIVE" either — RegisterKeyBind
+-- accepts a raw numeric code directly, same fallback pattern LivingBase's own main.lua uses.
+local VK_FALLBACK = { OEM_FIVE = 0xDC }
+local keyValue = (Key and Key[Config.SUMMON_KEY]) or VK_FALLBACK[Config.SUMMON_KEY]
 if keyValue == nil then
     log(string.format("Key '%s' not recognized by this UE4SS build — mod inactive.", Config.SUMMON_KEY))
 else

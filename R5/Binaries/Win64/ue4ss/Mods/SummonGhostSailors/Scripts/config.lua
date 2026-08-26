@@ -10,8 +10,13 @@
 
 local Config = {}
 
--- Hotkey. Confirmed free (2026-08-26): no other installed mod claims Backslash.
-Config.SUMMON_KEY = "Backslash"
+-- Hotkey. TEMPORARY: switched to "HOME" for testing (2026-08-26) — confirmed working in this
+-- UE4SS build via LivingBase's own history (Config.KEYS.dumpWidgets = "HOME"), to isolate
+-- whether the summon logic itself works independent of the backslash key-name confusion.
+-- "OEM_FIVE" (the real backslash binding, also confirmed working via LivingBase's own
+-- pre-2026-08-24 "\" statue-facing bind) is the intended long-term key — switch back once
+-- HOME confirms the rest of the mod works.
+Config.SUMMON_KEY = "HOME"
 
 -- Lifecycle.
 Config.GHOST_LIFETIME_MS       = 120000   -- each sailor despawns 120s after ITS OWN spawn
@@ -22,6 +27,13 @@ Config.GHOST_TICK_MS           = 200      -- shared follow/despawn tick cadence
 Config.GHOST_MAT_PATH          =
   "/Game/Environment/Gameplay/GDKit/Meshes/Building/MI_Building_SimplifiedPreview.MI_Building_SimplifiedPreview"
 Config.GHOST_MATERIAL_DELAY_MS = 800      -- settle delay after spawn before the material swap
+
+-- Opacity tuning — EXPERIMENTAL, untested (2026-08-26). Set to 1.0 to disable and fall back
+-- to the plain fixed-look material swap (zero risk, the original proven-safe path).
+-- 0.8 = RedFalcon's requested starting point ("down to 80%").
+Config.GHOST_OPACITY = 0.8
+Config.GHOST_OPACITY_SCALAR_NAMES = { "Opacity", "Opacity Amount", "OpacityAmount", "Alpha", "GhostOpacity" }
+Config.GHOST_COLOR_PARAM_NAMES    = { "AltColor", "MaxStabilityColor", "MinStabilityColor", "InstabilityColor" }
 
 -- Crew base pawn — BP_Mob_Crew_Regular_Player, the same "Player" faction crew brain
 -- LivingBase's own whistle.lua escort and FACTION_VISITOR_LOOKS both build on. Already
