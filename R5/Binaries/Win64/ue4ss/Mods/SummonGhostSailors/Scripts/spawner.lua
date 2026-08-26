@@ -267,6 +267,21 @@ local function getKismetMaterialLibrary()
     return nil
 end
 
+-- CreateDynamicMaterialInstance's real signature is (WorldContextObject, Parent, OptionalName,
+-- CreationFlags) — 4 declared params. First live attempt with 3 args (no CreationFlags) failed
+-- with "expected 5 parameters, received 3": same "this UE4SS build counts the return slot"
+-- quirk LivingBase's own spawner.lua already solved for BeginDeferredActorSpawnFromClass — try
+-- known-plausible variants once, lock onto whichever the engine accepts.
+local createVariants = {
+    { name = "4 args (+CreationFlags=0)",
+      call = function(lib, w, m, n) return lib:CreateDynamicMaterialInstance(w, m, n, 0) end },
+    { name = "5 args (+CreationFlags=0 +ret slot)",
+      call = function(lib, w, m, n) return lib:CreateDynamicMaterialInstance(w, m, n, 0, nil) end },
+    { name = "3 args classic",
+      call = function(lib, w, m, n) return lib:CreateDynamicMaterialInstance(w, m, n) end },
+}
+local lockedCreateVariant = nil
+
 local function tryOpacityInstance(mat, opacity)
     local lib = getKismetMaterialLibrary()
     if not lib then
@@ -275,11 +290,25 @@ local function tryOpacityInstance(mat, opacity)
     end
     local world = UEHelpers.GetWorld()
     local dyn
-    local ok, err = pcall(function()
-        dyn = lib:CreateDynamicMaterialInstance(world, mat, "GhostSailorMat")
-    end)
-    if not ok or not (dyn and dyn:IsValid()) then
-        always("[ghost-opacity] CreateDynamicMaterialInstance failed (" .. tostring(err) .. ") — keeping fixed-look material.")
+    if lockedCreateVariant then
+        local ok, res = pcall(lockedCreateVariant.call, lib, world, mat, "GhostSailorMat")
+        if ok then dyn = res else lockedCreateVariant = nil end
+    end
+    if not (dyn and dyn:IsValid()) then
+        for _, v in ipairs(createVariants) do
+            local ok, res = pcall(v.call, lib, world, mat, "GhostSailorMat")
+            if ok and res and res:IsValid() then
+                dyn = res
+                lockedCreateVariant = v
+                log("[ghost-opacity] CreateDynamicMaterialInstance signature locked: " .. v.name)
+                break
+            elseif not ok then
+                log("[ghost-opacity] variant '" .. v.name .. "' rejected: " .. tostring(res))
+            end
+        end
+    end
+    if not (dyn and dyn:IsValid()) then
+        always("[ghost-opacity] CreateDynamicMaterialInstance failed on every known signature — keeping fixed-look material.")
         return nil
     end
     always("[ghost-opacity] dynamic instance created — trying to set opacity=" .. tostring(opacity))
