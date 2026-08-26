@@ -245,21 +245,22 @@ function Spawner.Spawn(classPath, label, compositeLook)
 end
 
 --------------------------------------------------------------------
--- Opacity tuning — EXPERIMENTAL (2026-08-26), untested. LivingBase's own history confirms
--- comp:CreateDynamicMaterialInstance (the component-level UFUNCTION) crashes this game
--- natively, twice — this deliberately calls a DIFFERENT function instead,
--- UKismetMaterialLibrary:CreateDynamicMaterialInstance (a library call, not a component
--- method), so the actual crashing call is never made; only the already-proven-safe
--- comp:SetMaterial is used to attach the result. Still a first-ever attempt at a dynamic
--- material instance from THIS mod, so treat any failure as informative, not a bug to chase.
---
--- LivingBase's own FModel export of this exact material found 4 VECTOR color params
--- (AltColor/MaxStabilityColor/MinStabilityColor/InstabilityColor) blended by a hidden
--- "stability" value — no confirmed scalar "Opacity" param. This tries several plausible
--- scalar names (in case one exists but was never catalogued) AND falls back to nudging the
--- alpha channel of those same 4 color params (common for a Translucent material to read
--- opacity from a color's own alpha) — logging exactly what succeeded so the real answer is
--- known after one test, not guessed twice.
+-- Opacity tuning — CONFIRMED DANGEROUS (2026-08-26). LivingBase's own history already
+-- confirmed comp:CreateDynamicMaterialInstance (the component-level UFUNCTION) crashes this
+-- game natively, twice. This tried a DIFFERENT function instead —
+-- UKismetMaterialLibrary:CreateDynamicMaterialInstance, a library call rather than a
+-- component method — on the theory that the crashing call itself would never run. First
+-- live attempt (a wrong arg count) errored cleanly, caught by pcall, no crash, fell back to
+-- the fixed-look material correctly. Second live attempt (this function's current
+-- signature-auto-detection code) CRASHED THE GAME — zero [ghost-opacity] log output at all
+-- beforehand, the same "pcall cannot catch this" native-crash signature already documented
+-- for SetBody/AttachActorToShip elsewhere in this project's history. Disabled immediately
+-- (Config.GHOST_OPACITY = 1.0, see config.lua) per the "if it doesn't work we abandon that
+-- option" call — do NOT re-enable by just flipping that constant back without a genuinely
+-- new theory. The crash may not even be specific to the argument count tried; it could be
+-- that ANY CreateDynamicMaterialInstance-family call is unsafe in this engine build
+-- regardless of which UFunction variant or signature is used. Kept below as a documented
+-- reference for whoever revisits this, not as code anyone should assume is safe to call.
 --------------------------------------------------------------------
 local function getKismetMaterialLibrary()
     local o = StaticFindObject("/Script/Engine.Default__KismetMaterialLibrary")

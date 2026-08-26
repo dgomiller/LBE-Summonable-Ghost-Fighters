@@ -28,10 +28,17 @@ Config.GHOST_MAT_PATH          =
   "/Game/Environment/Gameplay/GDKit/Meshes/Building/MI_Building_SimplifiedPreview.MI_Building_SimplifiedPreview"
 Config.GHOST_MATERIAL_DELAY_MS = 800      -- settle delay after spawn before the material swap
 
--- Opacity tuning — EXPERIMENTAL, untested (2026-08-26). Set to 1.0 to disable and fall back
--- to the plain fixed-look material swap (zero risk, the original proven-safe path).
--- 0.8 = RedFalcon's requested starting point ("down to 80%").
-Config.GHOST_OPACITY = 0.8
+-- Opacity tuning — CONFIRMED DANGEROUS (2026-08-26): the very first live attempt crashed the
+-- game with zero [ghost-opacity] log output beforehand (the exact "pcall cannot catch this"
+-- native-crash signature already documented elsewhere for CreateDynamicMaterialInstance-family
+-- calls — LivingBase's own component-level version crashed the same way, twice). Reverted
+-- immediately per the "if it doesn't work we abandon that option" call. Left at 1.0 (disabled,
+-- falls back to the plain fixed-look material swap — the original zero-risk path) and the
+-- tryOpacityInstance code below is kept only as a documented reference, not called from
+-- anywhere live. Do not re-enable without a genuinely new theory, not another blind arg-count
+-- guess — the crash may not even be argument-count-specific; it could be this whole call
+-- family being unsafe in this engine build regardless of signature.
+Config.GHOST_OPACITY = 1.0
 Config.GHOST_OPACITY_SCALAR_NAMES = { "Opacity", "Opacity Amount", "OpacityAmount", "Alpha", "GhostOpacity" }
 Config.GHOST_COLOR_PARAM_NAMES    = { "AltColor", "MaxStabilityColor", "MinStabilityColor", "InstabilityColor" }
 
