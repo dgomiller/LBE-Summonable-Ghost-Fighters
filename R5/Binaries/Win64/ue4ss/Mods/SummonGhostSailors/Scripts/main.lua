@@ -10,12 +10,12 @@
  End (Config.SENKAMATI_KEY) summons one corrupted Senkamati ally — its genuine native look, but
  ALSO ghosted (same material swap as the sailors — RedFalcon: "the senkamati didnt get the
  ghost stuff"), real combat AI intact, just friendly to the player (faction copy only, no
- pacification) — a permanent standing companion, no auto-expiry.
+ pacification). Behaves identically to a sailor otherwise (RedFalcon: "i want them to behave
+ the same as the soldiers") — same Config.GHOST_LIFETIME_MS expiry, same dissipate FX, no
+ permanence, no toggle.
 
  Both kinds share ONE pool of Config.GHOST_MAX_ACTIVE (RedFalcon: "max 5 between both sailors
- and senkamati") — since the Senkamati is permanent, summoning several can block new sailors
- until you quit/reload; that's the accepted trade-off of sharing one cap with a non-expiring
- kind.
+ and senkamati").
 
  RegisterKeyBind must run synchronously during this initial script load (confirmed
  unsafe to call later, per LivingBase's own main.lua finding) — no deferred registration.
@@ -130,8 +130,12 @@ local function summonSenkamati()
                 log("Senkamati summon failed — see previous SPAWN FAILED line.")
                 return
             end
-            log(string.format("%s summoned — ghosting, fighting alongside you.", label))
-            Follow.Add(actor, label, { kind = "ally", permanent = true })
+            log(string.format("%s summoned — ghosting, fighting alongside you, despawns in %ds.",
+                label, Config.GHOST_LIFETIME_MS // 1000))
+            -- Behaves identically to the sailors now (RedFalcon: "i want them to behave the
+            -- same as the soldiers") -- no permanent flag, so it expires after
+            -- Config.GHOST_LIFETIME_MS and plays the same dissipate FX, same as a sailor.
+            Follow.Add(actor, label, { kind = "ally" })
             retryInGameThread(function()
                 if actor and actor:IsValid() then Spawner.MakeFriendly(actor) end
             end, 500, 5)
