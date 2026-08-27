@@ -50,9 +50,7 @@ in this UE4SS build). The main ones:
 If [Windrose Mod Settings](https://www.nexusmods.com/windrose/mods/442) by IceBoxStudio is
 installed, this mod registers itself automatically — both hotkeys, the ghost lifetime (in
 seconds), the max-active cap, and the ground-light toggle become editable from the game's
-native Settings > Mods screen. The lifetime/max-active sliders are continuous floats in this
-game's build (no integer-step widget available), so whatever value you land on is rounded to
-the nearest whole number when it's actually applied — the panel's own description says so.
+native Settings > Mods screen, with the lifetime/max-active sliders snapping to whole numbers.
 Entirely optional: the mod works exactly the same without Windrose Mod Settings installed.
 
 ## Requirements
@@ -65,8 +63,6 @@ Entirely optional: the mod works exactly the same without Windrose Mod Settings 
 
 - A game patch can change internal class/material paths and temporarily break the ghost look
   or a summon — everything version-dependent lives in `config.lua`.
-- The Windrose Mod Settings lifetime/max-active sliders don't visually snap to whole numbers
-  while dragging (see above) — the applied value is still always a whole number.
 - The Senkamati ally's friendly-faction technique is shared with Living Base Enhanced's own —
   if a future game patch changes how NPC factions work, both mods would need the same fix.
 
