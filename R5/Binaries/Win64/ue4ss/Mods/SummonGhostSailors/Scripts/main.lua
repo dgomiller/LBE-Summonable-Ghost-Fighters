@@ -22,7 +22,14 @@ math.randomseed(os.time())
 -- Kick off the ghost materials'/FX's real streaming load as early as possible — see
 -- Spawner.Prewarm's own comment. By the time anyone can actually press the summon key
 -- (requires being in-game, past menus/loading), these have had real wall-clock time to finish.
-pcall(function() Spawner.Prewarm() end)
+-- Explicitly hopped onto the game thread — LoadAsset (which Prewarm calls) is confirmed to
+-- throw if called from anywhere else, and top-level mod script execution isn't guaranteed to
+-- already be there.
+if ExecuteInGameThread then
+    ExecuteInGameThread(function() pcall(function() Spawner.Prewarm() end) end)
+else
+    pcall(function() Spawner.Prewarm() end)
+end
 
 local summonBusy = false
 
@@ -42,19 +49,26 @@ local function summon()
                 label, entry.name, Config.GHOST_MATERIAL_DELAY_MS, Config.GHOST_LIFETIME_MS // 1000))
             Follow.Add(actor, label)
             if ExecuteWithDelay then
-                -- Retry a few times if the ghost materials fail to resolve on the first try —
-                -- a genuinely cold load (nothing this session has touched these specific
-                -- assets yet) can fail an immediate StaticFindObject/LoadAsset retry even
-                -- though the exact same call succeeds once something else has already loaded
-                -- them. Same bounded-retry shape LivingBase's own senkaCrewFix/tryFix uses for
+                -- Retry a few times if the ghost materials fail to resolve on the first try
+                -- (see Spawner.Prewarm's own comment on the cold-streaming-load cause).
+                -- CONFIRMED LIVE (2026-08-26): ExecuteWithDelay's callback does NOT run on the
+                -- game thread in this UE4SS build -- LoadAsset threw "can only be called from
+                -- within the game thread" every time from inside it. Every retry attempt must
+                -- explicitly hop back via ExecuteInGameThread right before touching
+                -- Spawner.ApplyGhostMaterial (which calls LoadAsset) -- the outer
+                -- ExecuteInGameThread wrapping the whole summon() body does NOT cover code
+                -- reached through a LATER ExecuteWithDelay callback, only its own synchronous
+                -- body. Same bounded-retry shape LivingBase's own senkaCrewFix/tryFix uses for
                 -- composite-settling races.
                 local function tryGhost(triesLeft)
-                    if not (actor and actor:IsValid()) then return end
-                    local ok = false
-                    pcall(function() ok = Spawner.ApplyGhostMaterial(actor) end)
-                    if not ok and triesLeft > 0 then
-                        ExecuteWithDelay(500, function() tryGhost(triesLeft - 1) end)
-                    end
+                    ExecuteInGameThread(function()
+                        if not (actor and actor:IsValid()) then return end
+                        local ok = false
+                        pcall(function() ok = Spawner.ApplyGhostMaterial(actor) end)
+                        if not ok and triesLeft > 0 then
+                            ExecuteWithDelay(500, function() tryGhost(triesLeft - 1) end)
+                        end
+                    end)
                 end
                 ExecuteWithDelay(Config.GHOST_MATERIAL_DELAY_MS, function() tryGhost(5) end)
             end
