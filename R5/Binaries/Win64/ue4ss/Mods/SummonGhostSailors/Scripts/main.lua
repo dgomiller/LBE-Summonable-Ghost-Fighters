@@ -50,25 +50,29 @@ local function summon()
             Follow.Add(actor, label)
             if ExecuteWithDelay then
                 -- Retry a few times if the ghost materials fail to resolve on the first try
-                -- (see Spawner.Prewarm's own comment on the cold-streaming-load cause).
-                -- CONFIRMED LIVE (2026-08-26): ExecuteWithDelay's callback does NOT run on the
-                -- game thread in this UE4SS build -- LoadAsset threw "can only be called from
-                -- within the game thread" every time from inside it. Every retry attempt must
-                -- explicitly hop back via ExecuteInGameThread right before touching
-                -- Spawner.ApplyGhostMaterial (which calls LoadAsset) -- the outer
-                -- ExecuteInGameThread wrapping the whole summon() body does NOT cover code
-                -- reached through a LATER ExecuteWithDelay callback, only its own synchronous
-                -- body. Same bounded-retry shape LivingBase's own senkaCrewFix/tryFix uses for
-                -- composite-settling races.
+                -- (see Spawner.Prewarm's own comment). CONFIRMED LIVE (2026-08-26): LoadAsset
+                -- throws "can only be called from within the game thread" when called from an
+                -- ExecuteWithDelay callback directly -- every attempt must hop back via
+                -- ExecuteInGameThread first. LivingBase's own testbed.lua (2026-08-16, its
+                -- senkaCrewFix/tryFix history) already found and documented the OTHER half of
+                -- this: calling ExecuteWithDelay NESTED inside an ExecuteInGameThread callback
+                -- throws "No overload found for function 'ExecuteWithDelay'" in this UE4SS
+                -- build. Fix (matching their established pattern exactly): ExecuteInGameThread
+                -- (the actual work) and the next ExecuteWithDelay (the next retry) are SIBLINGS,
+                -- both direct top-level calls inside tryGhost -- never one nested in the
+                -- other's callback. Since ExecuteInGameThread is itself fire-and-forget async,
+                -- success/failure can't be checked synchronously right after it -- this just
+                -- unconditionally retries GHOST_MATERIAL_RETRIES times; re-applying an
+                -- already-successful material swap is harmless.
                 local function tryGhost(triesLeft)
                     ExecuteInGameThread(function()
-                        if not (actor and actor:IsValid()) then return end
-                        local ok = false
-                        pcall(function() ok = Spawner.ApplyGhostMaterial(actor) end)
-                        if not ok and triesLeft > 0 then
-                            ExecuteWithDelay(500, function() tryGhost(triesLeft - 1) end)
-                        end
+                        pcall(function()
+                            if actor and actor:IsValid() then Spawner.ApplyGhostMaterial(actor) end
+                        end)
                     end)
+                    if triesLeft > 0 then
+                        ExecuteWithDelay(500, function() tryGhost(triesLeft - 1) end)
+                    end
                 end
                 ExecuteWithDelay(Config.GHOST_MATERIAL_DELAY_MS, function() tryGhost(5) end)
             end
