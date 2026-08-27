@@ -78,14 +78,25 @@ M.KEYBIND_DEFS = {
     { key = "SENKAMATI_KEY", title = "Summon Senkamati Ally",   description = "Summons one corrupted Senkamati ally, friendly and fighting alongside you, permanent until you quit. (Restart required to take effect.)" },
 }
 
--- REMOVED (2026-08-26, RedFalcon: "the ghost lifetime goes between 0 and 1... max ghosts also
--- goes between 0 and 1") -- CONFIRMED LIVE: this game's R5ModSettings panel only actually
--- renders two widget types, a checkbox and a keybind picker; a plain `number` default gets
--- silently coerced into the checkbox (readable/writable only as 0 or 1), not a real numeric
--- field. GHOST_LIFETIME_MS/GHOST_MAX_ACTIVE stay fully configurable directly in config.lua —
--- just not exposed here, since there's no working widget for them. Revisit only if a future
--- R5ModSettings version adds a real numeric widget type.
-M.VALUE_DEFS = {}
+-- RETRIED as real sliders (2026-08-26, RedFalcon: "can we not make them sliders to like 500
+-- seconds and 15 ghosts"). Plain `type = "number"` is confirmed dead (silently coerced into a
+-- checkbox, 0/1 only) -- but main.dll (R5ModSettings' native component) references the game's
+-- own native settings-screen slider widget, WBP_Settings_EntryScalar, and contains the literal
+-- lowercase strings "scalar"/"discrete" alongside a "[{}] Skipped unsupported setting
+-- mod={} key={} type={} options={}" log line -- real evidence a `type = "scalar"` setting is
+-- genuinely supported, just never tried before now. The exact field names EntryScalar expects
+-- (min/max here are a first guess, not confirmed) live in that compiled DLL, unreachable from
+-- Lua source -- if the panel doesn't render a slider, check ue4ss.log for that exact "Skipped
+-- unsupported setting" line quoting these keys; that tells us definitively whether the type
+-- string or the field shape is wrong, rather than guessing blind a second time.
+-- `scale`: the UI operates in more human-friendly units than the underlying Config field —
+-- GHOST_LIFETIME_MS is milliseconds internally, but a 500-SECOND slider reads far better than
+-- a 500000-ms one, so the panel shows/saves SECONDS and ApplyOnce multiplies by `scale` back
+-- into Config. GHOST_MAX_ACTIVE has no scale (1:1, already a plain count).
+M.VALUE_DEFS = {
+    { key = "GHOST_LIFETIME_MS", title = "Ghost Lifetime (seconds)", description = "How long a summoned ghost lasts before despawning.", min = 10, max = 500, scale = 1000 },
+    { key = "GHOST_MAX_ACTIVE",  title = "Max Simultaneous Ghosts",  description = "How many ghosts (sailors + Senkamati combined) can be active at once.", min = 1, max = 15 },
+}
 
 M.TOGGLE_DEFS = {
     { key = "GHOST_FX_ENABLED", title = "Ground Light Effect", description = "Show the following ground-light effect under each ghost sailor." },
@@ -146,9 +157,11 @@ function M.WriteManifest(Config)
         }
     end
     for _, def in ipairs(M.VALUE_DEFS) do
+        local scale = def.scale or 1
         settings[#settings + 1] = {
-            key = def.key, title = def.title, description = def.description, type = "number",
-            default = Config[def.key] or 0,
+            key = def.key, title = def.title, description = def.description, type = "scalar",
+            default = (Config[def.key] or 0) / scale,
+            min = def.min, max = def.max,
         }
     end
     for _, def in ipairs(M.KEYBIND_DEFS) do
@@ -210,7 +223,7 @@ function M.ApplyOnce(Config)
     for _, def in ipairs(M.VALUE_DEFS) do
         local v = saved[def.key]
         if type(v) == "number" then
-            Config[def.key] = v
+            Config[def.key] = v * (def.scale or 1)
             applied = applied + 1
         end
     end
