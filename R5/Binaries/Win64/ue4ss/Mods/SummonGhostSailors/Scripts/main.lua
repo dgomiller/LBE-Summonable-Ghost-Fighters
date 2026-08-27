@@ -37,11 +37,21 @@ local function summon()
                 label, entry.name, Config.GHOST_MATERIAL_DELAY_MS, Config.GHOST_LIFETIME_MS // 1000))
             Follow.Add(actor, label)
             if ExecuteWithDelay then
-                ExecuteWithDelay(Config.GHOST_MATERIAL_DELAY_MS, function()
-                    pcall(function()
-                        if actor and actor:IsValid() then Spawner.ApplyGhostMaterial(actor) end
-                    end)
-                end)
+                -- Retry a few times if the ghost materials fail to resolve on the first try —
+                -- a genuinely cold load (nothing this session has touched these specific
+                -- assets yet) can fail an immediate StaticFindObject/LoadAsset retry even
+                -- though the exact same call succeeds once something else has already loaded
+                -- them. Same bounded-retry shape LivingBase's own senkaCrewFix/tryFix uses for
+                -- composite-settling races.
+                local function tryGhost(triesLeft)
+                    if not (actor and actor:IsValid()) then return end
+                    local ok = false
+                    pcall(function() ok = Spawner.ApplyGhostMaterial(actor) end)
+                    if not ok and triesLeft > 0 then
+                        ExecuteWithDelay(500, function() tryGhost(triesLeft - 1) end)
+                    end
+                end
+                ExecuteWithDelay(Config.GHOST_MATERIAL_DELAY_MS, function() tryGhost(5) end)
             end
         end)
         summonBusy = false
