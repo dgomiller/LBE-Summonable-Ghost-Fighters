@@ -42,10 +42,31 @@ local function resolveAsset(path)
     if not path then return nil end
     local o = StaticFindObject(path)
     if o and o:IsValid() then return o end
-    pcall(function() LoadAsset(path) end)
+    local okLoad, loadErr = pcall(function() LoadAsset(path) end)
+    if not okLoad then
+        always("[resolveAsset] LoadAsset threw for " .. tostring(path) .. ": " .. tostring(loadErr))
+    end
     o = StaticFindObject(path)
     if o and o:IsValid() then return o end
+    always("[resolveAsset] StaticFindObject still nil after LoadAsset for " .. tostring(path)
+        .. " (loadOk=" .. tostring(okLoad) .. ")")
     return nil
+end
+
+-- Spawner.Prewarm() — 2026-08-26, RedFalcon: "if i manually assign the texture first, then it
+-- works". Confirms LoadAsset kicks off a real, non-instant streaming load for these specific
+-- ghost-character assets (a Material + a MaterialInstance neither this mod nor LivingBase had
+-- ever touched yet this session) — an immediate StaticFindObject retry right after, and even a
+-- handful of 500ms-spaced retries, isn't reliably enough wall-clock time for it to finish. A
+-- prior MANUAL resolve earlier in the session (e.g. via LivingBase's lbtestmaterial2) gives it
+-- that time in the background before anything actually needs it, which is why "warming it up
+-- first" works. Call this once at mod load, well before the player can possibly press the
+-- summon key — by the time they do, the assets have had real time to finish streaming in.
+function Spawner.Prewarm()
+    for _, path in ipairs({ Config.GHOST_SKIN_MAT_PATH, Config.GHOST_CLOTH_MAT_PATH, Config.GHOST_FX_PATH }) do
+        pcall(function() LoadAsset(path) end)
+    end
+    log("Prewarm: kicked off LoadAsset for ghost materials + FX")
 end
 
 local function getGameplayStatics()

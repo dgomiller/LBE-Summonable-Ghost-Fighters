@@ -19,6 +19,11 @@ local function log(msg) print("[GhostSailors] " .. tostring(msg) .. "\n") end
 
 math.randomseed(os.time())
 
+-- Kick off the ghost materials'/FX's real streaming load as early as possible — see
+-- Spawner.Prewarm's own comment. By the time anyone can actually press the summon key
+-- (requires being in-game, past menus/loading), these have had real wall-clock time to finish.
+pcall(function() Spawner.Prewarm() end)
+
 local summonBusy = false
 
 local function summon()
