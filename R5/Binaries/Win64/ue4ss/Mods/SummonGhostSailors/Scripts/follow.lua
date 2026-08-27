@@ -146,17 +146,33 @@ local function warpNear(pawn, target, radius, index, total)
 end
 
 --------------------------------------------------------------------
--- Public: register a freshly spawned sailor for follow + despawn.
+-- Public: register a freshly spawned sailor (or ally) for follow (+ despawn, unless permanent).
+-- opts = { kind = "ghost"|"ally" (default "ghost"), permanent = bool (default false) }.
+-- The Senkamati ally (kind="ally", permanent=true) skips ghost material/FX entirely — it keeps
+-- its own genuine native look — and never expires; everything else (follow/yield-to-combat/
+-- warp-back) is identical, reusing the same tick.
 --------------------------------------------------------------------
-function Follow.Add(actor, label)
+function Follow.Add(actor, label, opts)
+    opts = opts or {}
+    local kind = opts.kind or "ghost"
     local fx = nil
-    if Config.GHOST_FX_ENABLED then
+    if kind == "ghost" and Config.GHOST_FX_ENABLED then
         fx = Spawner.SpawnFollowFx(actor)
     end
     Follow.active[#Follow.active + 1] = {
         actor = actor, label = label, spawnedAt = os.clock(), follow = {}, fx = fx,
+        kind = kind, permanent = opts.permanent or false,
     }
     Follow.StartTick()
+end
+
+-- Count of currently-active records of a given kind (e.g. the ghost-sailor max-cap check).
+function Follow.CountByKind(kind)
+    local n = 0
+    for _, rec in ipairs(Follow.active) do
+        if rec.kind == kind then n = n + 1 end
+    end
+    return n
 end
 
 function Follow.Reset()
@@ -196,7 +212,12 @@ local function tickOnce()
         if not (actor and actor:IsValid()) then
             if rec.fx and rec.fx:IsValid() then pcall(function() rec.fx:K2_DestroyActor() end) end
             table.remove(Follow.active, i)
-        elseif (now - rec.spawnedAt) * 1000 >= Config.GHOST_LIFETIME_MS then
+        elseif (not rec.permanent) and (now - rec.spawnedAt) * 1000 >= Config.GHOST_LIFETIME_MS then
+            local dieLoc = nil
+            pcall(function() dieLoc = actor:K2_GetActorLocation() end)
+            if dieLoc then
+                Spawner.PlayOneShotFx(Config.GHOST_DESPAWN_FX_PATH, dieLoc, Config.GHOST_DESPAWN_FX_LIFETIME_MS)
+            end
             pcall(function() actor:K2_DestroyActor() end)
             if rec.fx and rec.fx:IsValid() then pcall(function() rec.fx:K2_DestroyActor() end) end
             table.remove(Follow.active, i)

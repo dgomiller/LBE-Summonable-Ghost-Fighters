@@ -511,6 +511,218 @@ function Spawner.MoveFollowFx(fxActor, actor)
 end
 
 --------------------------------------------------------------------
+-- One-shot FX (e.g. the dissipate puff on despawn) — spawns a NiagaraActor at a fixed location
+-- and destroys it again after lifetimeMs, for a non-looping system that would otherwise sit
+-- frozen on its last frame forever. Callable from an async context (e.g. follow.lua's tick,
+-- which does NOT run on the game thread) — CONFIRMED LIVE (2026-08-26): LoadAsset (inside
+-- resolveAsset) throws if not hopped onto the game thread first, and ExecuteWithDelay must
+-- never be called from INSIDE an ExecuteInGameThread callback (confirmed by LivingBase's own
+-- testbed.lua, "No overload found for function 'ExecuteWithDelay'") — so the spawn happens
+-- inside ExecuteInGameThread, and the delayed cleanup is scheduled as a SIBLING call from
+-- there, never nested inside that same callback.
+--------------------------------------------------------------------
+function Spawner.PlayOneShotFx(path, atLoc, lifetimeMs)
+    if not (path and atLoc and atLoc.X) then return end
+    if not ExecuteInGameThread then return end
+    ExecuteInGameThread(function()
+        pcall(function()
+            local sys = resolveAsset(path)
+            if not (sys and sys:IsValid()) then
+                always("[ghost-fx] one-shot: could not resolve " .. tostring(path))
+                return
+            end
+            local cls
+            pcall(function() cls = StaticFindObject("/Script/Niagara.NiagaraActor") end)
+            if not (cls and cls:IsValid()) then return end
+            local gs = getGameplayStatics()
+            local world = UEHelpers.GetWorld()
+            if not (gs and world and world:IsValid()) then return end
+            local transform = {
+                Rotation = { W = 1.0, X = 0.0, Y = 0.0, Z = 0.0 },
+                Translation = { X = atLoc.X, Y = atLoc.Y, Z = atLoc.Z },
+                Scale3D = { X = 1.0, Y = 1.0, Z = 1.0 },
+            }
+            local preFinish = function(a)
+                pcall(function()
+                    local niag = a.NiagaraComponent
+                    if niag and niag:IsValid() then niag.Asset = sys end
+                end)
+            end
+            local fx = doEngineSpawn(gs, world, cls, transform, "GhostDissipateFx", preFinish)
+            if fx and fx:IsValid() then
+                fx.__ghostOneShot = true
+            end
+        end)
+    end)
+    -- Sibling to the ExecuteInGameThread call above, not nested inside it. Can't hold a
+    -- reference to the just-spawned actor synchronously (ExecuteInGameThread is fire-and-forget),
+    -- so this sweeps every one-shot FX actor still tagged old enough to clear instead.
+    if ExecuteWithDelay then
+        ExecuteWithDelay(lifetimeMs or 3000, function()
+            pcall(function()
+                local list = FindAllOf and FindAllOf("NiagaraActor")
+                if not list then return end
+                local n = 0
+                pcall(function() n = list:GetArrayNum() end)
+                if n == 0 then pcall(function() n = #list end) end
+                for i = 1, n do
+                    local a = list[i]
+                    if not a then pcall(function() a = list:Get(i) end) end
+                    local isOurs = false
+                    pcall(function() isOurs = a.__ghostOneShot == true end)
+                    if isOurs and a and a:IsValid() then
+                        pcall(function() a:K2_DestroyActor() end)
+                    end
+                end
+            end)
+        end)
+    end
+end
+
+--------------------------------------------------------------------
+-- Friendly-faction copy — ported from LivingBase's own spawner.lua (GetFriendlyFactionParams/
+-- MakeFriendly). Copies the FactionsParams a player crewman points at onto a hostile-by-default
+-- native mob, so it stops attacking the player/allies WITHOUT touching its AI/combat components
+-- at all — the opposite of LivingBase's own "corrupted" Senkamati rows, which pacify (strip
+-- combat) for safe display. This mod wants the Senkamati ally to keep real native combat AI and
+-- actually fight, just not treat the player as an enemy.
+--------------------------------------------------------------------
+function Spawner.GetFriendlyFactionParams()
+    if Spawner._friendlyFactionParams and Spawner._friendlyFactionParams:IsValid() then
+        return Spawner._friendlyFactionParams
+    end
+    local found = nil
+    pcall(function()
+        local path = Config.FRIENDLY_FACTION_ASSET
+        if path then
+            local fp = resolveAsset(path)
+            if fp and fp:IsValid() then found = fp end
+        end
+    end)
+    Spawner._friendlyFactionParams = found
+    return found
+end
+
+function Spawner.MakeFriendly(actor)
+    local fp = Spawner.GetFriendlyFactionParams()
+    if not (actor and actor:IsValid() and fp) then return false end
+    local ok = false
+    pcall(function()
+        local fc = actor.FactionComponent
+        if fc and fc:IsValid() then fc.FactionsParams = fp; ok = true end
+    end)
+    return ok
+end
+
+--------------------------------------------------------------------
+-- On-screen messages — ported near-verbatim from LivingBase's own Spawner.Toast. Splices a
+-- plain TextBlock into the game's native WBP_SideNotificationsContainer_C via AddChild, rather
+-- than PrintString/ClientMessage (both confirmed dead ends there: screen-messages flag off with
+-- no working exec command to flip it; ClientMessage routes to UE4SS's own console window, not
+-- the game's HUD). One shared self-rescheduling ticker handles removal, not a timer per toast.
+--------------------------------------------------------------------
+Spawner._activeToasts = Spawner._activeToasts or {}
+local toastTickerStarted = false
+local function toastTick()
+    local now = os.time()
+    local lastContainer
+    for i = #Spawner._activeToasts, 1, -1 do
+        local t = Spawner._activeToasts[i]
+        if now >= t.expiresAt then
+            pcall(function() t.box:RemoveChild(t.widget) end)
+            lastContainer = t.container
+            table.remove(Spawner._activeToasts, i)
+        end
+    end
+    if #Spawner._activeToasts == 0 and lastContainer then
+        pcall(function()
+            lastContainer.bHidden = true
+            lastContainer:CheckVisibility()
+            lastContainer:SetVisibility(ESlateVisibility and ESlateVisibility.Collapsed or 1)
+        end)
+    end
+    if ExecuteWithDelay then ExecuteWithDelay(500, toastTick) end
+end
+local function ensureToastTicker()
+    if toastTickerStarted then return end
+    toastTickerStarted = true
+    if ExecuteWithDelay then ExecuteWithDelay(500, toastTick) end
+end
+
+local function trySpliceToast(text, seconds)
+    local shown = false
+    pcall(function()
+        local container, box
+        local list
+        pcall(function() list = FindAllOf("WBP_SideNotificationsContainer_C") end)
+        if list then
+            local n = 0
+            pcall(function() n = list:GetArrayNum() end)
+            if n == 0 then pcall(function() n = #list end) end
+            for i = 1, n do
+                local w = list[i]
+                if not w then pcall(function() w = list:Get(i) end) end
+                if w and w:IsValid() then
+                    local b
+                    pcall(function() b = w.vbox_Notifications end)
+                    if b and b:IsValid() then
+                        container, box = w, b
+                        break
+                    end
+                end
+            end
+        end
+        if not (container and box) then return end
+
+        local okClass, TextBlockClass = pcall(function() return StaticFindObject("/Script/UMG.TextBlock") end)
+        local okOuter, GameInstance = pcall(function() return UEHelpers.GetGameInstance() end)
+        if not (okClass and TextBlockClass and TextBlockClass:IsValid()
+            and okOuter and GameInstance and GameInstance:IsValid()) then return end
+        local okNew, newWidget = pcall(function() return StaticConstructObject(TextBlockClass, GameInstance) end)
+        if not (okNew and newWidget and newWidget:IsValid()) then return end
+        pcall(function()
+            local ktl = UEHelpers.GetKismetTextLibrary()
+            newWidget:SetText(ktl:Conv_StringToText(text))
+        end)
+        pcall(function() newWidget:SetAutoWrapText(true) end)
+        pcall(function() newWidget:SetWrapTextWidth(360) end)
+        pcall(function()
+            local font = newWidget.Font
+            if font then
+                font.Size = 14
+                newWidget.Font = font
+            end
+        end)
+
+        local okAdd = pcall(function() box:AddChild(newWidget) end)
+        if not okAdd then return end
+        pcall(function() container.bHidden = false end)
+        pcall(function() container:CheckVisibility() end)
+        pcall(function() container:SetVisibility(ESlateVisibility and ESlateVisibility.Visible or 0) end)
+        shown = true
+
+        ensureToastTicker()
+        Spawner._activeToasts[#Spawner._activeToasts + 1] =
+            { box = box, widget = newWidget, container = container, expiresAt = os.time() + math.ceil(seconds or 4.0) }
+    end)
+    return shown
+end
+
+function Spawner.Toast(msg, seconds)
+    local text = tostring(msg)
+    local function attempt(triesLeft)
+        if trySpliceToast(text, seconds) then return end
+        if triesLeft > 0 and ExecuteWithDelay then
+            ExecuteWithDelay(1000, function() attempt(triesLeft - 1) end)
+        else
+            print("[GhostSailors] " .. text .. "\n")
+        end
+    end
+    attempt(20)
+    return true
+end
+
+--------------------------------------------------------------------
 -- Cosmetic cleanup (optional).
 --------------------------------------------------------------------
 function Spawner.HideNameplate(actor)

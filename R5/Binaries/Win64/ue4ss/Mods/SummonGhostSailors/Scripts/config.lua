@@ -114,6 +114,53 @@ Config.GHOST_FX_Z_OFFSET = -90.0
 Config.GHOST_FX_BACK_UU  = 0.0    -- reverted per RedFalcon: no backward slide, centered as-is
 Config.GHOST_FX_SCALE    = 1.0
 
+-- Dissipate effect (2026-08-26, RedFalcon: makes a timed-out ghost look like it dissipated
+-- instead of just vanishing). One-shot, does NOT loop — Spawner.PlayOneShotFx spawns it and
+-- destroys the FX actor itself after GHOST_DESPAWN_FX_LIFETIME_MS, since a non-looping Niagara
+-- system would otherwise sit frozen on its last frame forever if never cleaned up.
+Config.GHOST_DESPAWN_FX_PATH        = "/Game/FX/Particles/Mobs/Quest/Ghost/FX_QuestGhost_Despawn.FX_QuestGhost_Despawn"
+Config.GHOST_DESPAWN_FX_LIFETIME_MS = 3000
+
+-- Max simultaneous ghost sailors (2026-08-26, RedFalcon). Hitting the cap shows a toast instead
+-- of silently doing nothing.
+Config.GHOST_MAX_ACTIVE  = 5
+Config.GHOST_MAX_MESSAGE = "Max Ghosts Summoned"
+
+-- Corrupted Senkamati combat ally (2026-08-26, RedFalcon: "allow the corrupted (original)
+-- Senkamati to fight alongside too, using end to summon"). "Original" = the genuine native
+-- mob skeleton, untouched (no de-corrupt, no ghost material/FX) — copied from LivingBase's own
+-- Config.SENKAMATI_LOOKS "corrupted" kind rows (config.lua:775-777), which spawn these same
+-- three classes pacified+friendly for safe display. This mod wants the OPPOSITE of pacified —
+-- real native combat AI left fully intact, just friendly to the player — so it copies the
+-- friendly-faction FactionsParams (Spawner.MakeFriendly, ported from LivingBase's own
+-- spawner.lua:6830-6872) and nothing else: no MakePassive, no AIControllerClass swap, no
+-- component stripping. One press = one ally, no toggle (RedFalcon: "if its on a different key
+-- we dont need it toggled") — same "just summon" interaction as the ghost sailors' own key.
+-- Permanent (no 120s auto-expiry, no cap) — it's meant as a standing companion, not a timed
+-- cosmetic escort; reconsider if that turns out to be the wrong call once tested live.
+Config.SENKAMATI_KEY = "END"
+Config.FRIENDLY_FACTION_ASSET =
+  "/Game/Gameplay/Character/Common/Relationship/Params/DA_Player_Crew_Faction.DA_Player_Crew_Faction"
+local SC = "/Game/Gameplay/Character/AI/Mob/SenkamatiCorrupted/"
+Config.SENKAMATI_ROSTER = {
+  { name = "Senkamati Warrior", class = SC .. "Regular_Warrior/BP_Mob_SenkamatiCorrupted_Regular_Warrior.BP_Mob_SenkamatiCorrupted_Regular_Warrior_C" },
+  { name = "Senkamati Hunter",  class = SC .. "Regular_Hunter/BP_Mob_SenkamatiCorrupted_Regular_Hunter.BP_Mob_SenkamatiCorrupted_Regular_Hunter_C" },
+  { name = "Senkamati Caster",  class = SC .. "Regular_Shaman_Caster/BP_Mob_SenkamatiCorrupted_Regular_Shaman_Caster.BP_Mob_SenkamatiCorrupted_Regular_Shaman_Caster_C" },
+}
+
 Config.VERBOSE = false
+
+------------------------------------------------------------------
+-- OPTIONAL: R5ModSettings integration (2026-08-26). Applies whatever's already saved in
+-- Settings > Mods (keybinds, GHOST_LIFETIME_MS/GHOST_MAX_ACTIVE/GHOST_FX_ENABLED) over the
+-- defaults above, before main.lua reads Config. No-ops harmlessly if R5ModSettings isn't
+-- installed. See modsettings.lua's own header for scope/reasoning.
+------------------------------------------------------------------
+do
+  local ok, ModSettings = pcall(require, "modsettings")
+  if ok and ModSettings then
+    pcall(function() ModSettings.ApplyOnce(Config) end)
+  end
+end
 
 return Config
