@@ -89,14 +89,19 @@ M.KEYBIND_DEFS = {
 -- Lua source -- if the panel doesn't render a slider, check ue4ss.log for that exact "Skipped
 -- unsupported setting" line quoting these keys; that tells us definitively whether the type
 -- string or the field shape is wrong, rather than guessing blind a second time.
+-- CONFIRMED (2026-08-26, straight from Windrose Mod Settings' own author): the real type
+-- string is "slider", not "scalar" -- "scalar" happened to render something (the fractional
+-- 8.21-style values were real evidence of THAT), but was never the documented/intended type.
+-- The real schema has a `step` field (movement increment) alongside `min`/`max` -- step = 1
+-- makes the slider itself snap to whole numbers, so the math.floor(...) rounding in ApplyOnce
+-- below is now just a defensive backstop, not the only thing keeping this sane.
 -- `scale`: the UI operates in more human-friendly units than the underlying Config field —
 -- GHOST_LIFETIME_MS is milliseconds internally, but a 500-SECOND slider reads far better than
 -- a 500000-ms one, so the panel shows/saves SECONDS and ApplyOnce multiplies by `scale` back
 -- into Config. GHOST_MAX_ACTIVE has no scale (1:1, already a plain count).
-local WHOLE_NUMBER_NOTE = " (Rounded to the nearest whole number when applied — the slider itself doesn't snap.)"
 M.VALUE_DEFS = {
-    { key = "GHOST_LIFETIME_MS", title = "Ghost Lifetime (seconds)", description = "How long a summoned ghost lasts before despawning." .. WHOLE_NUMBER_NOTE, min = 10, max = 500, scale = 1000 },
-    { key = "GHOST_MAX_ACTIVE",  title = "Max Simultaneous Ghosts",  description = "How many ghosts (sailors + Senkamati combined) can be active at once." .. WHOLE_NUMBER_NOTE, min = 1, max = 15 },
+    { key = "GHOST_LIFETIME_MS", title = "Ghost Lifetime (seconds)", description = "How long a summoned ghost lasts before despawning.", min = 10, max = 500, step = 1, scale = 1000 },
+    { key = "GHOST_MAX_ACTIVE",  title = "Max Simultaneous Ghosts",  description = "How many ghosts (sailors + Senkamati combined) can be active at once.", min = 1, max = 15, step = 1 },
 }
 
 M.TOGGLE_DEFS = {
@@ -160,9 +165,9 @@ function M.WriteManifest(Config)
     for _, def in ipairs(M.VALUE_DEFS) do
         local scale = def.scale or 1
         settings[#settings + 1] = {
-            key = def.key, title = def.title, description = def.description, type = "scalar",
+            key = def.key, title = def.title, description = def.description, type = "slider",
             default = (Config[def.key] or 0) / scale,
-            min = def.min, max = def.max,
+            min = def.min, max = def.max, step = def.step or 1,
         }
     end
     for _, def in ipairs(M.KEYBIND_DEFS) do
