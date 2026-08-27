@@ -1,7 +1,7 @@
 --[[
  SummonGhostSailors / main.lua — entry point.
 
- Backslash (Config.SUMMON_KEY) summons one random-look sailor from Config.ROSTER as a
+ Home (Config.SUMMON_KEY) summons one random-look sailor from Config.ROSTER as a
  translucent "ghost": non-persistent (nothing here ever writes a save file, so nothing can be
  resurrected on reload), follows the player at pace (ported from LivingBase's whistle.lua
  followTick), and despawns itself Config.GHOST_LIFETIME_MS after ITS OWN spawn — independent

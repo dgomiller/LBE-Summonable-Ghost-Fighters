@@ -10,12 +10,11 @@
 
 local Config = {}
 
--- Hotkey. Switched back to the intended "OEM_FIVE" (backslash) for distribution (2026-08-26) —
--- was temporarily "HOME" during testing to isolate the summon logic from the backslash
--- key-name confusion (Key["Backslash"] doesn't exist in this UE4SS build; the real internal
--- name is "OEM_FIVE", confirmed via LivingBase's own pre-2026-08-24 "\" statue-facing bind).
--- Everything is now confirmed working end-to-end, so back to the real key.
-Config.SUMMON_KEY = "OEM_FIVE"
+-- Hotkey. "HOME" by deliberate choice (2026-08-26, RedFalcon) — sits right next to
+-- Config.SENKAMATI_KEY ("END") on a real keyboard, so both summon keys are adjacent. (Started
+-- as "OEM_FIVE"/backslash, then "HOME" for testing only — kept HOME once RedFalcon decided the
+-- HOME/End adjacency was the better choice, not reverted back.)
+Config.SUMMON_KEY = "HOME"
 
 -- Lifecycle.
 Config.GHOST_LIFETIME_MS       = 120000   -- each sailor despawns 120s after ITS OWN spawn

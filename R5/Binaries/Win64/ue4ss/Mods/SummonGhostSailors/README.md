@@ -9,8 +9,10 @@ nothing lingers across a reload. Fully standalone: Living Base Enhanced is **not
 
 | Key | Action |
 | --- | --- |
-| Backslash (`\`) | Summon one random-look ghost sailor (Player Crew, Buccaneers Musketeer/Sailor/Sergeant, or a Brethren of the Coast woman) |
+| Home | Summon one random-look ghost sailor (Player Crew, Buccaneers Musketeer/Sailor/Sergeant, or a Brethren of the Coast woman) |
 | End | Summon one corrupted Senkamati ally (Warrior, Hunter, or Caster) — real native combat AI, friendly to you |
+
+Home and End sit right next to each other on a real keyboard, by design.
 
 Both keys are remappable in `Scripts/config.lua` (`Config.SUMMON_KEY` / `Config.SENKAMATI_KEY`),
 or via Windrose Mod Settings if installed (see below).

@@ -3,7 +3,7 @@
 
 [size=4][b]What it does[/b][/size]
 [color=#D4D4D8]
-[b]Summon a ghost sailor (Backslash)[/b] — one random-look crew member (Buccaneers Musketeer, Sailor, Sergeant, a Brethren of the Coast woman, or the default Player Crew look) appears as a translucent ghost and starts following you at a jogging pace, matching your speed as you walk or sprint.
+[b]Summon a ghost sailor (Home)[/b] — one random-look crew member (Buccaneers Musketeer, Sailor, Sergeant, a Brethren of the Coast woman, or the default Player Crew look) appears as a translucent ghost and starts following you at a jogging pace, matching your speed as you walk or sprint.
 
 [b]Summon a corrupted Senkamati ally (End)[/b] — one Senkamati (Warrior, Hunter, or Caster, picked at random) appears with the same ghostly look, genuinely friendly to you, and keeps its real native combat AI — it will actually fight hostiles alongside you, not just stand there.
 
@@ -27,16 +27,16 @@
 (you should have ...\Mods\SummonGhostSailors\Scripts\... inside it).
 [*]Enable it: open ...\ue4ss\Mods\mods.txt and add the line:
 SummonGhostSailors : 1
-[*]Launch the game, load into a world, and press Backslash or End to try it.
+[*]Launch the game, load into a world, and press Home or End to try it.
 [/list]
 Optional: edit Scripts\config.lua (plain Lua, well-commented) to change lifetimes, the max-active cap, the roster, or either key.
 [/color]
 
 [size=4][b]Controls[/b][/size]
 [color=#D4D4D8]
-Backslash (\) — Summon one random-look ghost sailor
+Home — Summon one random-look ghost sailor
 End — Summon one corrupted Senkamati ally
-Remap either in Scripts\config.lua (Config.SUMMON_KEY / Config.SENKAMATI_KEY), or via Windrose Mod Settings if installed (see below).
+(Home and End sit right next to each other, by design.) Remap either in Scripts\config.lua (Config.SUMMON_KEY / Config.SENKAMATI_KEY), or via Windrose Mod Settings if installed (see below).
 [/color]
 
 [size=4][b]Optional: Windrose Mod Settings Support[/b][/size]
