@@ -151,9 +151,7 @@ end
 function Follow.Add(actor, label)
     local fx = nil
     if Config.GHOST_FX_ENABLED then
-        local loc = nil
-        pcall(function() loc = actor:K2_GetActorLocation() end)
-        if loc then fx = Spawner.SpawnFollowFx(loc) end
+        fx = Spawner.SpawnFollowFx(actor)
     end
     Follow.active[#Follow.active + 1] = {
         actor = actor, label = label, spawnedAt = os.clock(), follow = {}, fx = fx,
@@ -207,7 +205,7 @@ local function tickOnce()
             local cloc = nil
             pcall(function() cloc = actor:K2_GetActorLocation() end)
             if cloc then
-                if rec.fx then Spawner.MoveFollowFx(rec.fx, cloc) end
+                if rec.fx then Spawner.MoveFollowFx(rec.fx, actor) end
                 local dx, dy, dz = cloc.X - ploc.X, cloc.Y - ploc.Y, cloc.Z - ploc.Z
                 local d = math.sqrt(dx * dx + dy * dy + dz * dz)
                 if d > Config.FOLLOW_WARP_UU then

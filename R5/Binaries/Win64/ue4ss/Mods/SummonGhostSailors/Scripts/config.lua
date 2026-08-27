@@ -99,15 +99,19 @@ Config.FOLLOW_STALL_TICKS    = 3
 -- SpawnSystemAttached (confirmed to crash this game in LivingBase's own history) and NOT
 -- actor-to-actor K2_AttachToActor (also confirmed to crash there, different case) — repositioning
 -- a separate actor every tick sidesteps both entirely, using only techniques already proven safe.
--- GHOST_FX_Z_OFFSET is vertical-only, deliberately no forward offset — RedFalcon: the effect
--- needs to be centered ON the sailor's own body, not floating out in front of it.
--- GHOST_FX_PATH is a PLACEHOLDER — no confirmed-good ambient/looping ghost effect was found in
--- pakcontents.xlsx (only one-shot quest-ghost spawn/despawn puffs and a single mob "Wisp" hit
--- effect turned up); test candidates live via LivingBase's own `lbtestniagarapath <path>` on any
--- actor first, then update this path once one actually looks right as a persistent aura.
+-- CONFIRMED, RedFalcon (2026-08-26): FX_Necro_Legs_Light (a Boneman-mob ground light effect —
+-- thematically fitting, from the same "Boneman Ghost Pirate" asset family the material look
+-- was found alongside). It's a GROUND effect, not a body-height one — GHOST_FX_Z_OFFSET pulls
+-- it down from the sailor's root (typically capsule-center height) to roughly ground level, and
+-- GHOST_FX_BACK_UU slides it slightly toward the sailor's own back (computed from the sailor's
+-- current facing each tick, not a fixed world-axis offset, so it stays correct as they turn)
+-- so the sailor ends up standing centered over it rather than the effect reading as "in front."
+-- RedFalcon: doesn't need to be perfectly centered — both values are rough starting guesses,
+-- tune live if it still looks off.
 Config.GHOST_FX_ENABLED  = true
-Config.GHOST_FX_PATH     = "/Game/FX/Particles/Mobs/Quest/Ghost/FX_QuestGhost_Spawn.FX_QuestGhost_Spawn"
-Config.GHOST_FX_Z_OFFSET = 0.0
+Config.GHOST_FX_PATH     = "/Game/FX/Particles/Mobs/Boneman/FX_Necro_Legs_Light.FX_Necro_Legs_Light"
+Config.GHOST_FX_Z_OFFSET = -90.0
+Config.GHOST_FX_BACK_UU  = 50.0
 Config.GHOST_FX_SCALE    = 1.0
 
 Config.VERBOSE = false

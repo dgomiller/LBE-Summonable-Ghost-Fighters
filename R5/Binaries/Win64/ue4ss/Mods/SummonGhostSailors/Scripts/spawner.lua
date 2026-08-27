@@ -366,8 +366,13 @@ function Spawner.ApplyGhostMaterial(actor)
     if not (actor and actor:IsValid()) then return false end
     local skinMat = resolveAsset(Config.GHOST_SKIN_MAT_PATH)
     local clothMat = resolveAsset(Config.GHOST_CLOTH_MAT_PATH)
+    if not (skinMat and skinMat:IsValid()) then
+        always("[ghost] could not resolve SKIN material: " .. tostring(Config.GHOST_SKIN_MAT_PATH))
+    end
+    if not (clothMat and clothMat:IsValid()) then
+        always("[ghost] could not resolve CLOTH material: " .. tostring(Config.GHOST_CLOTH_MAT_PATH))
+    end
     if not (skinMat and skinMat:IsValid() and clothMat and clothMat:IsValid()) then
-        always("[ghost] could not resolve skin/cloth ghost materials")
         return false
     end
 
@@ -421,8 +426,28 @@ end
 -- (confirmed to crash this game in LivingBase's own history) and NOT actor-to-actor
 -- K2_AttachToActor (also confirmed to crash there, different case).
 --------------------------------------------------------------------
-function Spawner.SpawnFollowFx(atLoc)
-    if not (atLoc and atLoc.X) then return nil end
+-- Computes the FX's target world position for a given sailor: ground-level Z (pulled down
+-- from the sailor's own root, which sits at capsule-center height) and a small slide toward
+-- the sailor's CURRENT back (from its own yaw, not a fixed world-axis offset — stays correct
+-- as it turns while following) so the sailor ends up standing centered over the ground effect.
+local function fxTargetFor(actor)
+    local loc, yawDeg = nil, 0.0
+    pcall(function() loc = actor:K2_GetActorLocation() end)
+    if not loc then return nil end
+    pcall(function() yawDeg = actor:K2_GetActorRotation().Yaw end)
+    local yawRad = math.rad(yawDeg)
+    local back = Config.GHOST_FX_BACK_UU or 0.0
+    return {
+        X = loc.X - math.cos(yawRad) * back,
+        Y = loc.Y - math.sin(yawRad) * back,
+        Z = loc.Z + (Config.GHOST_FX_Z_OFFSET or 0.0),
+    }
+end
+
+function Spawner.SpawnFollowFx(actor)
+    if not (actor and actor:IsValid()) then return nil end
+    local pos = fxTargetFor(actor)
+    if not pos then return nil end
     local sys = resolveAsset(Config.GHOST_FX_PATH)
     if not (sys and sys:IsValid()) then
         always("[ghost-fx] could not resolve " .. tostring(Config.GHOST_FX_PATH))
@@ -441,7 +466,7 @@ function Spawner.SpawnFollowFx(atLoc)
     local scale = Config.GHOST_FX_SCALE or 1.0
     local transform = {
         Rotation = { W = 1.0, X = 0.0, Y = 0.0, Z = 0.0 },
-        Translation = { X = atLoc.X, Y = atLoc.Y, Z = atLoc.Z + (Config.GHOST_FX_Z_OFFSET or 0.0) },
+        Translation = { X = pos.X, Y = pos.Y, Z = pos.Z },
         Scale3D = { X = scale, Y = scale, Z = scale },
     }
     local preFinish = function(a)
@@ -453,14 +478,14 @@ function Spawner.SpawnFollowFx(atLoc)
     return doEngineSpawn(gs, world, cls, transform, "GhostSailorFx", preFinish)
 end
 
--- Reposition an already-spawned follow FX to a sailor's current location. Vertical offset
--- only — deliberately no forward offset, so the effect stays centered ON the sailor's own
--- body rather than floating out in front of it.
-function Spawner.MoveFollowFx(fxActor, loc)
-    if not (fxActor and fxActor:IsValid() and loc and loc.X) then return false end
+-- Reposition an already-spawned follow FX to a sailor's current location/facing.
+function Spawner.MoveFollowFx(fxActor, actor)
+    if not (fxActor and fxActor:IsValid()) then return false end
+    local pos = fxTargetFor(actor)
+    if not pos then return false end
     return pcall(function()
         fxActor:K2_SetActorLocation(
-            { X = loc.X, Y = loc.Y, Z = loc.Z + (Config.GHOST_FX_Z_OFFSET or 0.0) }, false, {}, false)
+            { X = pos.X, Y = pos.Y, Z = pos.Z }, false, {}, false)
     end)
 end
 
