@@ -1,0 +1,85 @@
+[size=5][b]LBE: Summonable Ghost Fighters[/b][/size]
+[color=#D4D4D8]A spin-off, standalone companion to [url=https://www.nexusmods.com/windrose/mods/535][b]Living Base Enhanced[/b][/url] — summon a translucent ghost crewman or a corrupted Senkamati ally on demand, have it follow and fight alongside you, and watch it dissipate into mist a couple of minutes later. Nothing it spawns is ever saved, so nothing lingers — every summon is a short-lived, disposable escort, not a permanent addition to your base. Works completely on its own; Living Base Enhanced is not required.[/color]
+
+[size=4][b]What it does[/b][/size]
+[color=#D4D4D8]
+[b]Summon a ghost sailor (Backslash)[/b] — one random-look crew member (Buccaneers Musketeer, Sailor, Sergeant, a Brethren of the Coast woman, or the default Player Crew look) appears as a translucent ghost and starts following you at a jogging pace, matching your speed as you walk or sprint.
+
+[b]Summon a corrupted Senkamati ally (End)[/b] — one Senkamati (Warrior, Hunter, or Caster, picked at random) appears with the same ghostly look, genuinely friendly to you, and keeps its real native combat AI — it will actually fight hostiles alongside you, not just stand there.
+
+[b]They dissipate, they don't just vanish[/b] — after their lifetime runs out (120 seconds by default), a ghost plays a short dissipating-mist effect at its own feet before disappearing, instead of simply popping out of existence.
+
+[b]A trailing ground light[/b] follows every summoned ghost, so you can track them at a glance even in a crowd or at range.
+
+[b]Capped, with a warning[/b] — up to 5 ghosts (sailors and Senkamati combined, configurable) can be active at once; summoning past the cap shows an on-screen "Max Ghosts Summoned" message instead of silently doing nothing.
+
+[b]Combat-aware following[/b] — a summoned ghost yields to its own combat AI the moment it's actually fighting something, and warps back to your side if it ever falls too far behind.
+
+[b]Completely non-persistent by design[/b] — nothing this mod spawns is ever written to a save file. Reload the game and every ghost is gone, whether or not its timer had run out yet.
+[/color]
+
+[size=4][b]Installation[/b][/size]
+[color=#D4D4D8]
+[list=1]
+[*]Install UE4SS (latest experimental / RE-UE4SS build) into Windrose, same as any other UE4SS mod for this game.
+[*]Extract the download so the mod folder sits at:
+...\Windrose\R5\Binaries\Win64\ue4ss\Mods\SummonGhostSailors\
+(you should have ...\Mods\SummonGhostSailors\Scripts\... inside it).
+[*]Enable it: open ...\ue4ss\Mods\mods.txt and add the line:
+SummonGhostSailors : 1
+[*]Launch the game, load into a world, and press Backslash or End to try it.
+[/list]
+Optional: edit Scripts\config.lua (plain Lua, well-commented) to change lifetimes, the max-active cap, the roster, or either key.
+[/color]
+
+[size=4][b]Controls[/b][/size]
+[color=#D4D4D8]
+Backslash (\) — Summon one random-look ghost sailor
+End — Summon one corrupted Senkamati ally
+Remap either in Scripts\config.lua (Config.SUMMON_KEY / Config.SENKAMATI_KEY), or via Windrose Mod Settings if installed (see below).
+[/color]
+
+[size=4][b]Optional: Windrose Mod Settings Support[/b][/size]
+[color=#D4D4D8]If you also have [url=https://www.nexusmods.com/windrose/mods/442][b]Windrose Mod Settings[/b][/url] by [url=https://www.nexusmods.com/windrose/users/77413713][b]IceBoxStudio[/b][/url] installed, this mod registers itself with it automatically. Both keys, the ghost lifetime (in seconds), the max-active cap, and the ground-light toggle all become editable from the game's native Settings > Mods screen.[/color]
+
+[color=#D4D4D8]Entirely optional both directions: this mod works exactly the same without Windrose Mod Settings installed. Note: the lifetime/max-active sliders are continuous, not integer-stepped (a Windrose Mod Settings limitation), so the value you land on is rounded to the nearest whole number when it's actually applied — the panel's own description says so.[/color]
+
+[size=4][b]Requirements[/b][/size]
+[color=#D4D4D8]
+[list]
+[*]Windrose (Kraken Express) — single-player. Built against the current Early Access build.
+[*]UE4SS — latest experimental / RE-UE4SS build.
+[*]No other mods required — this is fully standalone, including from Living Base Enhanced.
+[*]Note: this is an unofficial mod, so a game patch may change internal class paths (all centralized in config.lua for quick fixing).
+[/list]
+[/color]
+
+[size=4][b]Known Limitations[/b][/size]
+[color=#D4D4D8]
+[list]
+[*]Because it's an unofficial mod, a game patch can change internal class/material paths and temporarily break the ghost look or a summon. Everything version-dependent lives in config.lua.
+[*]The Windrose Mod Settings sliders for lifetime/max-active are continuous floats (e.g. dragging to "8.21"), not integer-stepped — the applied value is always rounded to the nearest whole number, but the slider itself won't visually snap while you drag it.
+[*]The Senkamati ally shares its faction copy with the friendly-faction technique this mod's sibling project (Living Base Enhanced) also uses — if a future game patch changes how NPC factions work, both mods would need the same fix.
+[/list]
+[/color]
+
+[size=4][b]Permissions / License[/b][/size]
+[color=#D4D4D8]All rights reserved by default, except for the specific permissions below — nothing here is implied beyond what's listed.
+
+Permitted, without needing to ask:
+[list=1]
+[*]Modify this mod for your own personal use.
+[*]Reuse this mod's code in your own separate mod, with credit.
+[*]Convert or port this mod to other games, with credit.
+[/list]
+
+Not permitted: reuploading or rehosting this mod — modified or unmodified — anywhere other than this page; selling this mod, or using it in anything sold or monetized, in whole or in part. (Nexus's own Donation Points system is fine — that's Nexus's own charity-linked mechanism, not third-party monetization.)
+
+Windrose and its game assets, class names, and IP belong to Kraken Express — this is an unofficial, unaffiliated mod.[/color]
+
+[size=4][b]Credits[/b][/size]
+[color=#D4D4D8]A spin-off of [url=https://www.nexusmods.com/windrose/mods/535][b]Living Base Enhanced[/b][/url], built by the same author — several techniques (the friendly-faction copy, the follow-at-heel AI, the on-screen toast notifications) were ported directly from that project's own codebase.
+
+Thanks also to [url=https://www.nexusmods.com/windrose/users/77413713][b]IceBoxStudio[/b][/url] for [url=https://www.nexusmods.com/windrose/mods/442][b]Windrose Mod Settings[/b][/url], which this mod optionally integrates with for in-game configuration.
+
+Built iteratively with Claude.[/color]

@@ -1,0 +1,20 @@
+LBE: Summonable Ghost Fighters — Changelog
+(internal mod folder/id: SummonGhostSailors)
+
+====================================================================
+1.0.0 (2026-08-26) — Initial release
+====================================================================
+- Backslash summons one random-look ghost sailor (Player Crew, Buccaneers Musketeer/Sailor/
+  Sergeant, or a Brethren of the Coast woman) with a translucent ghost material, following you
+  at pace, yielding to combat, warping back if left behind.
+- End summons one corrupted Senkamati ally (Warrior/Hunter/Caster), same ghost look, real
+  native combat AI intact, friendly to the player — fights alongside you.
+- Both kinds dissipate (a short mist effect) and despawn after Config.GHOST_LIFETIME_MS
+  (120s default), independently per summon.
+- A trailing ground-light effect follows every active ghost.
+- Shared max-active cap (Config.GHOST_MAX_ACTIVE, 5 default) across both kinds, with an
+  on-screen "Max Ghosts Summoned" message when hit.
+- Fully non-persistent: nothing this mod spawns is ever written to a save file.
+- Fully standalone: no dependency on Living Base Enhanced at runtime.
+- Optional Windrose Mod Settings integration: both hotkeys, ghost lifetime (seconds), max
+  simultaneous ghosts, and the ground-light toggle are all editable in Settings > Mods.

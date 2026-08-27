@@ -10,13 +10,12 @@
 
 local Config = {}
 
--- Hotkey. TEMPORARY: switched to "HOME" for testing (2026-08-26) — confirmed working in this
--- UE4SS build via LivingBase's own history (Config.KEYS.dumpWidgets = "HOME"), to isolate
--- whether the summon logic itself works independent of the backslash key-name confusion.
--- "OEM_FIVE" (the real backslash binding, also confirmed working via LivingBase's own
--- pre-2026-08-24 "\" statue-facing bind) is the intended long-term key — switch back once
--- HOME confirms the rest of the mod works.
-Config.SUMMON_KEY = "HOME"
+-- Hotkey. Switched back to the intended "OEM_FIVE" (backslash) for distribution (2026-08-26) —
+-- was temporarily "HOME" during testing to isolate the summon logic from the backslash
+-- key-name confusion (Key["Backslash"] doesn't exist in this UE4SS build; the real internal
+-- name is "OEM_FIVE", confirmed via LivingBase's own pre-2026-08-24 "\" statue-facing bind).
+-- Everything is now confirmed working end-to-end, so back to the real key.
+Config.SUMMON_KEY = "OEM_FIVE"
 
 -- Lifecycle.
 Config.GHOST_LIFETIME_MS       = 120000   -- each sailor despawns 120s after ITS OWN spawn
