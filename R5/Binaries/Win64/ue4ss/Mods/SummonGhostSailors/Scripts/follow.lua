@@ -148,15 +148,17 @@ end
 --------------------------------------------------------------------
 -- Public: register a freshly spawned sailor (or ally) for follow (+ despawn, unless permanent).
 -- opts = { kind = "ghost"|"ally" (default "ghost"), permanent = bool (default false) }.
--- The Senkamati ally (kind="ally", permanent=true) skips ghost material/FX entirely — it keeps
--- its own genuine native look — and never expires; everything else (follow/yield-to-combat/
--- warp-back) is identical, reusing the same tick.
+-- Both kinds are "ghosts" now (RedFalcon: "the senkamati didnt get the ghost stuff" — it's
+-- meant to, same ground-light follow FX as the sailors; the material swap itself is applied
+-- separately in main.lua's summonSenkamati, same as the sailors' own tryGhost). The Senkamati
+-- ally (kind="ally", permanent=true) never expires; everything else (follow/yield-to-combat/
+-- warp-back/FX) is identical, reusing the same tick.
 --------------------------------------------------------------------
 function Follow.Add(actor, label, opts)
     opts = opts or {}
     local kind = opts.kind or "ghost"
     local fx = nil
-    if kind == "ghost" and Config.GHOST_FX_ENABLED then
+    if Config.GHOST_FX_ENABLED then
         fx = Spawner.SpawnFollowFx(actor)
     end
     Follow.active[#Follow.active + 1] = {

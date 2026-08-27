@@ -63,10 +63,17 @@ end
 -- first" works. Call this once at mod load, well before the player can possibly press the
 -- summon key — by the time they do, the assets have had real time to finish streaming in.
 function Spawner.Prewarm()
-    for _, path in ipairs({ Config.GHOST_SKIN_MAT_PATH, Config.GHOST_CLOTH_MAT_PATH, Config.GHOST_FX_PATH }) do
+    local paths = {
+        Config.GHOST_SKIN_MAT_PATH, Config.GHOST_CLOTH_MAT_PATH, Config.GHOST_FX_PATH,
+        Config.GHOST_DESPAWN_FX_PATH, Config.FRIENDLY_FACTION_ASSET,
+    }
+    for _, entry in ipairs(Config.SENKAMATI_ROSTER or {}) do
+        paths[#paths + 1] = entry.class
+    end
+    for _, path in ipairs(paths) do
         pcall(function() LoadAsset(path) end)
     end
-    log("Prewarm: kicked off LoadAsset for ghost materials + FX")
+    log("Prewarm: kicked off LoadAsset for ghost materials, FX, faction asset, and Senkamati classes")
 end
 
 local function getGameplayStatics()
