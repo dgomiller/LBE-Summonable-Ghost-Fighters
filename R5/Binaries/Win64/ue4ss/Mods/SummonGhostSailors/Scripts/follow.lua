@@ -10,9 +10,10 @@
 
 local UEHelpers = require("UEHelpers")
 local Config = require("config")
+local Spawner = require("spawner")
 
 local Follow = {}
-Follow.active = {}   -- { {actor=, label=, spawnedAt=, follow={}}, ... }
+Follow.active = {}   -- { {actor=, label=, spawnedAt=, follow={}, fx=}, ... }
 Follow._ticking = false
 
 local function log(msg) if Config.VERBOSE then print("[GhostSailors:Follow] " .. tostring(msg) .. "\n") end end
@@ -148,8 +149,14 @@ end
 -- Public: register a freshly spawned sailor for follow + despawn.
 --------------------------------------------------------------------
 function Follow.Add(actor, label)
+    local fx = nil
+    if Config.GHOST_FX_ENABLED then
+        local loc = nil
+        pcall(function() loc = actor:K2_GetActorLocation() end)
+        if loc then fx = Spawner.SpawnFollowFx(loc) end
+    end
     Follow.active[#Follow.active + 1] = {
-        actor = actor, label = label, spawnedAt = os.clock(), follow = {},
+        actor = actor, label = label, spawnedAt = os.clock(), follow = {}, fx = fx,
     }
     Follow.StartTick()
 end
@@ -189,15 +196,18 @@ local function tickOnce()
         local rec = Follow.active[i]
         local actor = rec.actor
         if not (actor and actor:IsValid()) then
+            if rec.fx and rec.fx:IsValid() then pcall(function() rec.fx:K2_DestroyActor() end) end
             table.remove(Follow.active, i)
         elseif (now - rec.spawnedAt) * 1000 >= Config.GHOST_LIFETIME_MS then
             pcall(function() actor:K2_DestroyActor() end)
+            if rec.fx and rec.fx:IsValid() then pcall(function() rec.fx:K2_DestroyActor() end) end
             table.remove(Follow.active, i)
             log(rec.label .. " expired (120s) — despawned")
         elseif player and ploc then
             local cloc = nil
             pcall(function() cloc = actor:K2_GetActorLocation() end)
             if cloc then
+                if rec.fx then Spawner.MoveFollowFx(rec.fx, cloc) end
                 local dx, dy, dz = cloc.X - ploc.X, cloc.Y - ploc.Y, cloc.Z - ploc.Z
                 local d = math.sqrt(dx * dx + dy * dy + dz * dz)
                 if d > Config.FOLLOW_WARP_UU then

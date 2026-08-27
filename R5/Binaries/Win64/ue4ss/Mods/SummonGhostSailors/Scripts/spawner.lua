@@ -343,34 +343,49 @@ local function tryOpacityInstance(mat, opacity)
 end
 
 --------------------------------------------------------------------
--- Ghost material — same MI_Building_SimplifiedPreview swap LivingBase's ApplyGhostMaterial
--- uses, parameterized on the passed-in actor instead of a dev-probe global.
+-- Ghost material — CONFIRMED, RedFalcon: "it looks awesome" (2026-08-26). Skin material on
+-- actor.Mesh (the base body), a different material on every other composite clothing/armor
+-- piece — ported from LivingBase's own Spawner.ApplyTwoMaterialsToActor, including its
+-- confirmed fix: identify the body-mesh component by GetFName():ToString(), never by raw `==`
+-- (two independently-obtained component references to the same component aren't reliably
+-- `==` in this UE4SS build — confirmed live the hard way, see LivingBase's CLAUDE.md item 79's
+-- follow-up).
 --------------------------------------------------------------------
+local function unwrapComp(comp)
+    pcall(function() if comp ~= nil and type(comp) == "userdata" and comp.get then comp = comp:get() end end)
+    return comp
+end
+
+local function compFName(comp)
+    local n = nil
+    pcall(function() n = comp:GetFName():ToString() end)
+    return n
+end
+
 function Spawner.ApplyGhostMaterial(actor)
     if not (actor and actor:IsValid()) then return false end
-    local mat = resolveAsset(Config.GHOST_MAT_PATH)
-    if not (mat and mat:IsValid()) then
-        always("[ghost] could not resolve ghost material: " .. Config.GHOST_MAT_PATH)
+    local skinMat = resolveAsset(Config.GHOST_SKIN_MAT_PATH)
+    local clothMat = resolveAsset(Config.GHOST_CLOTH_MAT_PATH)
+    if not (skinMat and skinMat:IsValid() and clothMat and clothMat:IsValid()) then
+        always("[ghost] could not resolve skin/cloth ghost materials")
         return false
     end
 
-    local appliedMat = mat
-    if Config.GHOST_OPACITY and Config.GHOST_OPACITY < 1.0 then
-        local dyn = tryOpacityInstance(mat, Config.GHOST_OPACITY)
-        if dyn then appliedMat = dyn end
-    end
-
-    local touched = 0
-    local function applyTo(comp)
-        pcall(function() if comp ~= nil and type(comp) == "userdata" and comp.get then comp = comp:get() end end)
-        if not (comp and comp:IsValid()) then return end
-        local n = 0
+    local function applySlots(comp, mat)
+        if not (comp and comp:IsValid() and mat and mat:IsValid()) then return 0 end
+        local n, ok_n = 0, 0
         pcall(function() n = comp:GetNumMaterials() end)
         for slot = 0, (n - 1) do
-            if pcall(function() comp:SetMaterial(slot, appliedMat) end) then touched = touched + 1 end
+            if pcall(function() comp:SetMaterial(slot, mat) end) then ok_n = ok_n + 1 end
         end
+        return ok_n
     end
-    pcall(function() applyTo(actor.Mesh) end)
+
+    local bodyMesh = unwrapComp(actor.Mesh)
+    local bodyName = bodyMesh and compFName(bodyMesh) or nil
+    local skinSlots, clothSlots = 0, 0
+    if bodyMesh and bodyMesh:IsValid() then skinSlots = applySlots(bodyMesh, skinMat) end
+
     for _, className in ipairs({ "StaticMeshComponent", "SkeletalMeshComponent" }) do
         local cls = StaticFindObject("/Script/Engine." .. className)
         if cls and cls:IsValid() then
@@ -383,14 +398,70 @@ function Spawner.ApplyGhostMaterial(actor)
                     local comp
                     pcall(function() comp = comps[i] end)
                     if not comp then pcall(function() comp = comps:Get(i) end) end
-                    applyTo(comp)
+                    comp = unwrapComp(comp)
+                    if comp and comp:IsValid() then
+                        local cn = compFName(comp)
+                        if not (bodyName and cn == bodyName) then
+                            clothSlots = clothSlots + applySlots(comp, clothMat)
+                        end
+                    end
                 end
             end
         end
     end
-    log(string.format("[ghost] applied to %d material slot(s) (%s)", touched,
-        appliedMat == mat and "fixed look" or "dynamic, opacity-tuned"))
-    return touched > 0
+    log(string.format("[ghost] skin slots=%d, cloth slots=%d", skinSlots, clothSlots))
+    return (skinSlots + clothSlots) > 0
+end
+
+--------------------------------------------------------------------
+-- Follow effect — a separate NiagaraActor, spawned once and repositioned to the sailor's
+-- exact location every follow-tick (see follow.lua). Ported from LivingBase's proven-safe
+-- Spawner.TestSpawnNiagaraActor technique: a bare native NiagaraActor + a plain `niag.Asset =
+-- sys` property write, no UFunction call involved at all. Deliberately NOT SpawnSystemAttached
+-- (confirmed to crash this game in LivingBase's own history) and NOT actor-to-actor
+-- K2_AttachToActor (also confirmed to crash there, different case).
+--------------------------------------------------------------------
+function Spawner.SpawnFollowFx(atLoc)
+    if not (atLoc and atLoc.X) then return nil end
+    local sys = resolveAsset(Config.GHOST_FX_PATH)
+    if not (sys and sys:IsValid()) then
+        always("[ghost-fx] could not resolve " .. tostring(Config.GHOST_FX_PATH))
+        return nil
+    end
+    local cls
+    pcall(function() cls = StaticFindObject("/Script/Niagara.NiagaraActor") end)
+    if not (cls and cls:IsValid()) then
+        always("[ghost-fx] could not resolve NiagaraActor class")
+        return nil
+    end
+    local gs = getGameplayStatics()
+    local world = UEHelpers.GetWorld()
+    if not (gs and world and world:IsValid()) then return nil end
+
+    local scale = Config.GHOST_FX_SCALE or 1.0
+    local transform = {
+        Rotation = { W = 1.0, X = 0.0, Y = 0.0, Z = 0.0 },
+        Translation = { X = atLoc.X, Y = atLoc.Y, Z = atLoc.Z + (Config.GHOST_FX_Z_OFFSET or 0.0) },
+        Scale3D = { X = scale, Y = scale, Z = scale },
+    }
+    local preFinish = function(a)
+        pcall(function()
+            local niag = a.NiagaraComponent
+            if niag and niag:IsValid() then niag.Asset = sys end
+        end)
+    end
+    return doEngineSpawn(gs, world, cls, transform, "GhostSailorFx", preFinish)
+end
+
+-- Reposition an already-spawned follow FX to a sailor's current location. Vertical offset
+-- only — deliberately no forward offset, so the effect stays centered ON the sailor's own
+-- body rather than floating out in front of it.
+function Spawner.MoveFollowFx(fxActor, loc)
+    if not (fxActor and fxActor:IsValid() and loc and loc.X) then return false end
+    return pcall(function()
+        fxActor:K2_SetActorLocation(
+            { X = loc.X, Y = loc.Y, Z = loc.Z + (Config.GHOST_FX_Z_OFFSET or 0.0) }, false, {}, false)
+    end)
 end
 
 --------------------------------------------------------------------

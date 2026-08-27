@@ -22,10 +22,16 @@ Config.SUMMON_KEY = "HOME"
 Config.GHOST_LIFETIME_MS       = 120000   -- each sailor despawns 120s after ITS OWN spawn
 Config.GHOST_TICK_MS           = 200      -- shared follow/despawn tick cadence
 
--- Ghost look. Same translucent preview material LivingBase's own Spawner.ApplyGhostMaterial
--- swaps onto every mesh slot — confirmed rendering on a character-adjacent mesh already.
-Config.GHOST_MAT_PATH          =
-  "/Game/Environment/Gameplay/GDKit/Meshes/Building/MI_Building_SimplifiedPreview.MI_Building_SimplifiedPreview"
+-- Ghost look — CONFIRMED, RedFalcon: "it looks awesome" (2026-08-26). A genuine ghost-character
+-- material pair found via a pakcontents.xlsx keyword sweep, applied via the same proven-safe
+-- SetMaterial split LivingBase's own Spawner.ApplyTwoMaterialsToActor uses: one material on the
+-- base body/skin mesh, a different one on every composite clothing/armor piece. Superseded the
+-- original repurposed MI_Building_SimplifiedPreview build-preview material entirely — no opacity
+-- hack needed, this pair already looks right on its own.
+Config.GHOST_SKIN_MAT_PATH  =
+  "/Game/Character/Skeletal_Meshes/Human/Regular/Ghost/Materials/MI_Fable_Male_Ghost_Small.MI_Fable_Male_Ghost_Small"
+Config.GHOST_CLOTH_MAT_PATH =
+  "/Game/Character/Shaders/MasterMaterials/M_CharacterGhost_V2.M_CharacterGhost_V2"
 Config.GHOST_MATERIAL_DELAY_MS = 800      -- settle delay after spawn before the material swap
 
 -- Opacity tuning — CONFIRMED DANGEROUS (2026-08-26): the very first live attempt crashed the
@@ -85,6 +91,24 @@ Config.FOLLOW_PARTIAL        = true
 Config.FOLLOW_ASSERTIVE      = false
 Config.FOLLOW_AUTOSTOP_LOGIC = true
 Config.FOLLOW_STALL_TICKS    = 3
+
+-- Follow effect (2026-08-26, RedFalcon: "have an effect follow them"). A separate NiagaraActor,
+-- repositioned to the sailor's own location every follow-tick — the same technique LivingBase's
+-- proven-safe Spawner.TestSpawnNiagaraActor uses (a bare native NiagaraActor + a plain
+-- `niag.Asset = sys` property write, no UFunction call at all). Deliberately NOT
+-- SpawnSystemAttached (confirmed to crash this game in LivingBase's own history) and NOT
+-- actor-to-actor K2_AttachToActor (also confirmed to crash there, different case) — repositioning
+-- a separate actor every tick sidesteps both entirely, using only techniques already proven safe.
+-- GHOST_FX_Z_OFFSET is vertical-only, deliberately no forward offset — RedFalcon: the effect
+-- needs to be centered ON the sailor's own body, not floating out in front of it.
+-- GHOST_FX_PATH is a PLACEHOLDER — no confirmed-good ambient/looping ghost effect was found in
+-- pakcontents.xlsx (only one-shot quest-ghost spawn/despawn puffs and a single mob "Wisp" hit
+-- effect turned up); test candidates live via LivingBase's own `lbtestniagarapath <path>` on any
+-- actor first, then update this path once one actually looks right as a persistent aura.
+Config.GHOST_FX_ENABLED  = true
+Config.GHOST_FX_PATH     = "/Game/FX/Particles/Mobs/Quest/Ghost/FX_QuestGhost_Spawn.FX_QuestGhost_Spawn"
+Config.GHOST_FX_Z_OFFSET = 0.0
+Config.GHOST_FX_SCALE    = 1.0
 
 Config.VERBOSE = false
 
