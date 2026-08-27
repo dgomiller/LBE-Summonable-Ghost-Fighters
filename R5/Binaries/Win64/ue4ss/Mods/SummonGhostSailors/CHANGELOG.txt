@@ -2,6 +2,16 @@ LBE: Summonable Ghost Fighters — Changelog
 (internal mod folder/id: SummonGhostSailors)
 
 ====================================================================
+1.0.1 (2026-08-26) — Windrose Mod Settings slider fix
+====================================================================
+- Fixed: the Ghost Lifetime / Max Simultaneous Ghosts sliders in Settings > Mods now use the
+  correct "slider" setting type (confirmed directly by Windrose Mod Settings' own author),
+  with a proper step of 1 so the slider itself snaps to whole numbers. The previous release's
+  best-guess type rendered a working slider, but with no snapping — landing on a value like
+  "8.21 ghosts" was possible (harmless — it was always rounded before being applied — just
+  confusing to look at).
+
+====================================================================
 1.0.0 (2026-08-26) — Initial release
 ====================================================================
 - Home summons one random-look ghost sailor (Player Crew, Buccaneers Musketeer/Sailor/
