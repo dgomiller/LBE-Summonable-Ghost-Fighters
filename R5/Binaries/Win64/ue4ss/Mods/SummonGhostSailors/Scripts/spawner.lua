@@ -205,8 +205,16 @@ function Spawner.SetCompositeParams(actor, paramsPath, sex, bodyTypesPath)
 end
 
 --------------------------------------------------------------------
--- Spawner.Spawn(classPath, label, compositeLook) -> actor|nil
+-- Spawner.Spawn(classPath, label, compositeLook, makeFriendly) -> actor|nil
 -- compositeLook = { params, sex, bodyTypes } or nil.
+-- makeFriendly (2026-08-26, added for the Senkamati ally): copies the friendly-faction params
+-- BOTH pre-build (inside the deferred-spawn window, before BeginPlay runs) AND again
+-- post-build — matching LivingBase's own Spawner.Spawn exactly (spawner.lua:829-850). This
+-- matters for a genuinely hostile native mob: applying the faction copy only AFTER BeginPlay
+-- (this mod's first attempt, via a post-spawn retry loop alone) was too late — its AIController
+-- had already read/cached its initial hostile-faction perception state by then, so it kept
+-- attacking the player despite FactionsParams eventually being set correctly. Pre-build
+-- application is the fix; the post-build call + main.lua's own retry loop stay as backup.
 --------------------------------------------------------------------
 local instanceLabelCounts = {}
 local function nextInstanceLabel(baseLabel)
@@ -216,7 +224,7 @@ local function nextInstanceLabel(baseLabel)
     return baseLabel .. " " .. n
 end
 
-function Spawner.Spawn(classPath, label, compositeLook)
+function Spawner.Spawn(classPath, label, compositeLook, makeFriendly)
     local cls = resolveClass(classPath)
     if not cls then
         always("SPAWN FAILED (class unresolved): " .. tostring(classPath))
@@ -251,11 +259,14 @@ function Spawner.Spawn(classPath, label, compositeLook)
 
     local hasLook = compositeLook and (compositeLook.params or compositeLook.bodyTypes)
     local preFinish = nil
-    if hasLook then
+    if hasLook or makeFriendly then
         preFinish = function(a)
-            pcall(function()
-                Spawner.SetCompositeParams(a, compositeLook.params, compositeLook.sex, compositeLook.bodyTypes)
-            end)
+            if hasLook then
+                pcall(function()
+                    Spawner.SetCompositeParams(a, compositeLook.params, compositeLook.sex, compositeLook.bodyTypes)
+                end)
+            end
+            if makeFriendly then pcall(function() Spawner.MakeFriendly(a) end) end
         end
     end
 
@@ -263,6 +274,7 @@ function Spawner.Spawn(classPath, label, compositeLook)
     local actor = doEngineSpawn(gs, world, cls, transform, finalLabel, preFinish)
     if not actor or not actor:IsValid() then return nil end
 
+    if makeFriendly then pcall(function() Spawner.MakeFriendly(actor) end) end
     if not Config.COMBATANT then makeSetDressing(actor) end
     ensureController(actor)
     if Config.HIDE_NAMEPLATES then Spawner.HideNameplate(actor) end

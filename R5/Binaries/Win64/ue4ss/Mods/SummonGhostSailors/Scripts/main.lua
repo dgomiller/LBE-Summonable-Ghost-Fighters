@@ -121,7 +121,11 @@ local function summonSenkamati()
     ExecuteInGameThread(function()
         pcall(function()
             local entry = Config.SENKAMATI_ROSTER[math.random(#Config.SENKAMATI_ROSTER)]
-            local actor, label = Spawner.Spawn(entry.class, entry.name, nil)
+            -- makeFriendly=true: applied PRE-build (before BeginPlay) inside Spawner.Spawn
+            -- itself, not just after -- CONFIRMED LIVE (2026-08-26) that a post-spawn-only
+            -- faction copy was too late for this native hostile class; it kept attacking the
+            -- player despite FactionsParams eventually being set correctly.
+            local actor, label = Spawner.Spawn(entry.class, entry.name, nil, true)
             if not (actor and actor:IsValid()) then
                 log("Senkamati summon failed — see previous SPAWN FAILED line.")
                 return
