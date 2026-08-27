@@ -111,7 +111,7 @@ Config.FOLLOW_STALL_TICKS    = 3
 Config.GHOST_FX_ENABLED  = true
 Config.GHOST_FX_PATH     = "/Game/FX/Particles/Mobs/Boneman/FX_Necro_Legs_Light.FX_Necro_Legs_Light"
 Config.GHOST_FX_Z_OFFSET = -90.0
-Config.GHOST_FX_BACK_UU  = 50.0
+Config.GHOST_FX_BACK_UU  = 0.0    -- reverted per RedFalcon: no backward slide, centered as-is
 Config.GHOST_FX_SCALE    = 1.0
 
 Config.VERBOSE = false
