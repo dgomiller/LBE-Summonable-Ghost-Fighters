@@ -93,9 +93,10 @@ M.KEYBIND_DEFS = {
 -- GHOST_LIFETIME_MS is milliseconds internally, but a 500-SECOND slider reads far better than
 -- a 500000-ms one, so the panel shows/saves SECONDS and ApplyOnce multiplies by `scale` back
 -- into Config. GHOST_MAX_ACTIVE has no scale (1:1, already a plain count).
+local WHOLE_NUMBER_NOTE = " (Rounded to the nearest whole number when applied — the slider itself doesn't snap.)"
 M.VALUE_DEFS = {
-    { key = "GHOST_LIFETIME_MS", title = "Ghost Lifetime (seconds)", description = "How long a summoned ghost lasts before despawning.", min = 10, max = 500, scale = 1000 },
-    { key = "GHOST_MAX_ACTIVE",  title = "Max Simultaneous Ghosts",  description = "How many ghosts (sailors + Senkamati combined) can be active at once.", min = 1, max = 15 },
+    { key = "GHOST_LIFETIME_MS", title = "Ghost Lifetime (seconds)", description = "How long a summoned ghost lasts before despawning." .. WHOLE_NUMBER_NOTE, min = 10, max = 500, scale = 1000 },
+    { key = "GHOST_MAX_ACTIVE",  title = "Max Simultaneous Ghosts",  description = "How many ghosts (sailors + Senkamati combined) can be active at once." .. WHOLE_NUMBER_NOTE, min = 1, max = 15 },
 }
 
 M.TOGGLE_DEFS = {
@@ -223,7 +224,14 @@ function M.ApplyOnce(Config)
     for _, def in ipairs(M.VALUE_DEFS) do
         local v = saved[def.key]
         if type(v) == "number" then
-            Config[def.key] = v * (def.scale or 1)
+            -- Rounded to a whole number (2026-08-26, RedFalcon: "I can't summon 8.21 ghosts")
+            -- -- the native EntryScalar slider is a continuous float with no integer-step field
+            -- found anywhere in R5ModSettings' own main.dll (checked via string extraction:
+            -- no "step"/"interval"/"integer"/"round"/"delta" hit at all), so it can't be made
+            -- to snap on the UI side through this registration schema. Rounding here instead
+            -- guarantees the value this mod actually USES is always a sane whole number,
+            -- regardless of whatever fractional value the slider saved while being dragged.
+            Config[def.key] = math.floor(v * (def.scale or 1) + 0.5)
             applied = applied + 1
         end
     end
