@@ -65,6 +65,18 @@ local function retryInGameThread(fn, delayMs, triesLeft)
     end
 end
 
+-- Ghost reskin, applied ONCE after the summon's composite mesh has finished (re)building (2026-10-02).
+-- A crash was seen ~1.6 s after a summon, while its clothing was still being recreated and the old
+-- 500 ms x6 pass was walking/replacing components under it. Now: first try after
+-- Config.GHOST_MATERIAL_DELAY_MS, and only retry (up to 2 more times) if that pass applied nothing.
+local function applyGhostLater(actor)
+    local done = false
+    retryInGameThread(function()
+        if done or not (actor and actor:IsValid()) then return end
+        if Spawner.ApplyGhostMaterial(actor) then done = true end
+    end, Config.GHOST_MATERIAL_DELAY_MS, 2)
+end
+
 --------------------------------------------------------------------
 -- Shared cap across both ghost sailors and the Senkamati ally.
 --------------------------------------------------------------------
@@ -83,25 +95,88 @@ end
 --------------------------------------------------------------------
 local summonBusy = false
 
+-- One normal ghost sailor (the default summon, and the fallback if a Grenadier roll cannot spawn).
+local function spawnSailor()
+    local entry = Config.ROSTER[math.random(#Config.ROSTER)]
+    local actor, label = Spawner.Spawn(Config.CREW_CLASS, "Ghost Sailor",
+        { params = entry.params, sex = entry.sex, bodyTypes = entry.bodyTypes })
+    if not (actor and actor:IsValid()) then
+        log("Summon failed — see previous SPAWN FAILED line.")
+        return false
+    end
+    log(string.format("%s summoned (%s) — ghosting in %dms, despawns in %ds.",
+        label, entry.name, Config.GHOST_MATERIAL_DELAY_MS, Config.GHOST_LIFETIME_MS // 1000))
+    Follow.Add(actor, label, { kind = "ghost" })
+    applyGhostLater(actor)
+    return true
+end
+
+-- Optional Grenadier (off by default): a native Blackbeard mob, so it takes the Senkamati path
+-- (friendly pre-build + owner sync + ghost look) instead of the crew path.
+local function grenadierClassReady()
+    local c = nil
+    pcall(function() c = Spawner.ResolveClass(Config.GRENADIER_CLASS) end)
+    return c ~= nil and c:IsValid()
+end
+
+local function spawnGrenadier()
+    local gActor, gLabel = Spawner.Spawn(Config.GRENADIER_CLASS, Config.GRENADIER_NAME or "Ghost Grenadier", nil, true)
+    if not (gActor and gActor:IsValid()) then return false end
+    log(string.format("%s summoned (grenadier roll) — ghosting, despawns in %ds.",
+        gLabel, Config.GHOST_LIFETIME_MS // 1000))
+    Follow.Add(gActor, gLabel, { kind = "ally" })
+    retryInGameThread(function()
+        if gActor and gActor:IsValid() then Spawner.MakeFriendly(gActor) end
+    end, 500, 5)
+    applyGhostLater(gActor)
+    local gOwnerDone = false
+    retryInGameThread(function()
+        if gOwnerDone or not (gActor and gActor:IsValid()) then return end
+        if Spawner.SyncOwner(gActor) then gOwnerDone = true end
+    end, 1000, 3)
+    return true
+end
+
 local function summon()
     if summonBusy then return end
     if overCap() then return end
     summonBusy = true
     ExecuteInGameThread(function()
         pcall(function()
-            local entry = Config.ROSTER[math.random(#Config.ROSTER)]
-            local actor, label = Spawner.Spawn(Config.CREW_CLASS, "Ghost Sailor",
-                { params = entry.params, sex = entry.sex, bodyTypes = entry.bodyTypes })
-            if not (actor and actor:IsValid()) then
-                log("Summon failed — see previous SPAWN FAILED line.")
+            if Config.GRENADIER_ENABLED and math.random() < (Config.GRENADIER_CHANCE or 0.10) then
+                if grenadierClassReady() then
+                    if not spawnGrenadier() then
+                        log("Grenadier summon failed — falling back to a normal ghost sailor.")
+                        spawnSailor()
+                    end
+                    return
+                end
+                -- The Grenadier class is not in memory yet (the menu-time prewarm is dropped when the
+                -- world loads). Ask for it now and keep trying for ~5 s before falling back to a sailor,
+                -- so the roll works the first time instead of silently costing a summon.
+                pcall(function() LoadAsset(Config.GRENADIER_CLASS) end)
+                local settled = false
+                retryInGameThread(function()
+                    if settled or not grenadierClassReady() then return end
+                    settled = true
+                    if not spawnGrenadier() then
+                        log("Grenadier summon failed — falling back to a normal ghost sailor.")
+                        spawnSailor()
+                    end
+                end, 500, 9)
+                if ExecuteWithDelay then
+                    ExecuteWithDelay(5500, function()
+                        ExecuteInGameThread(function()
+                            if settled then return end
+                            settled = true
+                            log("Grenadier class did not load in time — falling back to a normal ghost sailor.")
+                            pcall(spawnSailor)
+                        end)
+                    end)
+                end
                 return
             end
-            log(string.format("%s summoned (%s) — ghosting in %dms, despawns in %ds.",
-                label, entry.name, Config.GHOST_MATERIAL_DELAY_MS, Config.GHOST_LIFETIME_MS // 1000))
-            Follow.Add(actor, label, { kind = "ghost" })
-            retryInGameThread(function()
-                if actor and actor:IsValid() then Spawner.ApplyGhostMaterial(actor) end
-            end, 500, 5)
+            spawnSailor()
         end)
         summonBusy = false
     end)
@@ -139,9 +214,13 @@ local function summonSenkamati()
             retryInGameThread(function()
                 if actor and actor:IsValid() then Spawner.MakeFriendly(actor) end
             end, 500, 5)
+            applyGhostLater(actor)
+            -- Owner sync (Caster fix): once, after the actor has settled (needs a live PlayerState).
+            local ownerDone = false
             retryInGameThread(function()
-                if actor and actor:IsValid() then Spawner.ApplyGhostMaterial(actor) end
-            end, 500, 5)
+                if ownerDone or not (actor and actor:IsValid()) then return end
+                if Spawner.SyncOwner(actor) then ownerDone = true end
+            end, 1000, 3)
         end)
         senkamatiBusy = false
     end)

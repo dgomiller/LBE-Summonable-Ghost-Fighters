@@ -30,7 +30,16 @@ Config.GHOST_SKIN_MAT_PATH  =
   "/Game/Character/Skeletal_Meshes/Human/Regular/Ghost/Materials/MI_Fable_Male_Ghost_Small.MI_Fable_Male_Ghost_Small"
 Config.GHOST_CLOTH_MAT_PATH =
   "/Game/Character/Shaders/MasterMaterials/M_CharacterGhost_V2.M_CharacterGhost_V2"
-Config.GHOST_MATERIAL_DELAY_MS = 800      -- settle delay after spawn before the material swap
+-- Make Ghost preset (2026-10-02): hair + armor materials, same as LivingBase's lbmakeghost. SKIN is
+-- also used on eye/mouth slots; CLOTH_MAT_PATH (M_CharacterGhost_V2) now only covers leftover body slots.
+Config.GHOST_HAIR_MAT_PATH  =
+  "/Game/Character/Skeletal_Meshes/Armor/ArmorRegular/Ghost/Materials/MI_Hair_Ghost.MI_Hair_Ghost"
+Config.GHOST_ARMOR_MAT_PATH =
+  "/Game/Character/Skeletal_Meshes/Armor/ArmorRegular/Ghost/Materials/MI_Boneman_Ghost_Spanish.MI_Boneman_Ghost_Spanish"
+-- Disable Ghost Effect (2026-10-02): when true, summons keep their normal look (no ghost reskin at all).
+-- The ground-light and dissipate effects are separate (GHOST_FX_ENABLED) and are not affected.
+Config.DISABLE_GHOST_EFFECT = false
+Config.GHOST_MATERIAL_DELAY_MS = 2500     -- settle delay after spawn before the (single) material swap; was 800 with 6 passes
 
 -- Opacity tuning — CONFIRMED DANGEROUS (2026-08-26): the very first live attempt crashed the
 -- game with zero [ghost-opacity] log output beforehand (the exact "pcall cannot catch this"
@@ -71,24 +80,37 @@ Config.ROSTER = {
     params = objPath(FV .. "BrethrenOfTheCoast/CompositeMesh/Common/", "DA_NPC_AnimatedActor_BotC_Common_Female_01_CompositeMeshComponentParams") },
 }
 
+-- Grenadier (2026-10-02, RedFalcon): a native Blackbeard Grenadier that can replace a ghost sailor roll.
+-- OFF by default -- its grenades do heavy damage (to enemies, and potentially your own base/structures).
+-- Real native class, so it is spawned friendly like the Senkamati (faction copy + owner sync), not as crew.
+Config.GRENADIER_ENABLED = false
+Config.GRENADIER_CHANCE  = 0.10   -- chance per Home press, only when GRENADIER_ENABLED
+Config.GRENADIER_NAME    = "Ghost Grenadier"
+Config.GRENADIER_CLASS   =
+  "/Game/Gameplay/Character/AI/Mob/Blackbeard/Regular_Grenadier/BP_Mob_Blackbeard_Regular_Grenadier.BP_Mob_Blackbeard_Regular_Grenadier_C"
+
 -- Cosmetic cleanup (optional).
 Config.HIDE_NAMEPLATES = false
 
 -- Follow tuning — same shape/defaults as LivingBase's whistle.lua followTick.
-Config.FOLLOW_START_UU       = 700
-Config.FOLLOW_WARP_UU        = 8000
+Config.FOLLOW_START_UU       = 450   -- start walking back to you beyond this (was 700)
+Config.FOLLOW_WARP_UU        = 3000   -- teleport back beside you beyond this many uu (100 uu = 1 m). Settings > Mods slider: 10-500 m, default 30 m
 Config.FOLLOW_WARP_RING_UU   = 500
-Config.FOLLOW_SPEED_MULT     = 3.0
+Config.FOLLOW_WARP_BEHIND   = true   -- teleport only to the area behind the player (never in front)
+Config.FOLLOW_SPEED_MULT     = 3.0   -- unused while FOLLOW_MATCH_PACE is off
 Config.FOLLOW_SPEED_MIN      = 250.0
 Config.FOLLOW_SPEED_MAX      = 900.0
 Config.FOLLOW_PACE_MARGIN    = 150.0
-Config.FOLLOW_MATCH_PACE     = true
+Config.FOLLOW_MATCH_PACE     = false   -- OFF 2026-10-02: setting speeds does nothing out of combat (walk gait caps at 220); see CHANGELOG
 Config.FOLLOW_END_UU         = 300.0
 Config.FOLLOW_SPEED          = 0.0
 Config.FOLLOW_PARTIAL        = true
 Config.FOLLOW_ASSERTIVE      = false
 Config.FOLLOW_AUTOSTOP_LOGIC = true
 Config.FOLLOW_STALL_TICKS    = 3
+Config.FOLLOW_GRACE_S         = 3.0    -- leave a new summon completely alone this long (its clothing is still being built)
+Config.FOLLOW_FAST_MS        = 50     -- only used while FOLLOW_MATCH_PACE is on
+Config.FOLLOW_DEBUG          = false  -- when true logs [GhostSailors:FollowDbg]/[FollowState] per far summon to ue4ss.log
 
 -- Follow effect (2026-08-26, RedFalcon: "have an effect follow them"). A separate NiagaraActor,
 -- repositioned to the sailor's own location every follow-tick — the same technique LivingBase's
@@ -122,6 +144,8 @@ Config.GHOST_DESPAWN_FX_LIFETIME_MS = 3000
 -- Max simultaneous ghost sailors (2026-08-26, RedFalcon). Hitting the cap shows a toast instead
 -- of silently doing nothing.
 Config.GHOST_MAX_ACTIVE  = 5
+-- On-screen message when a summon despawns: "<name> dissipated - N left".
+Config.DESPAWN_NOTIFY = true
 Config.GHOST_MAX_MESSAGE = "Max Ghosts Summoned"
 
 -- Corrupted Senkamati combat ally (2026-08-26, RedFalcon: "allow the corrupted (original)
@@ -134,7 +158,8 @@ Config.GHOST_MAX_MESSAGE = "Max Ghosts Summoned"
 -- spawner.lua:6830-6872) and nothing else: no MakePassive, no AIControllerClass swap, no
 -- component stripping. One press = one ally, no toggle (RedFalcon: "if its on a different key
 -- we dont need it toggled") — same "just summon" interaction as the ghost sailors' own key.
--- Permanent (no 120s auto-expiry, no cap) — it's meant as a standing companion, not a timed
+-- UPDATE 2026-10-02: NOT permanent any more -- every summon (sailor, Senkamati, Grenadier) expires after
+-- GHOST_LIFETIME_MS and counts toward the cap. (Old note follows.) Permanent (no 120s auto-expiry, no cap) — it's meant as a standing companion, not a timed
 -- cosmetic escort; reconsider if that turns out to be the wrong call once tested live.
 Config.SENKAMATI_KEY = "END"
 Config.FRIENDLY_FACTION_ASSET =
@@ -144,6 +169,8 @@ Config.SENKAMATI_ROSTER = {
   { name = "Senkamati Warrior", class = SC .. "Regular_Warrior/BP_Mob_SenkamatiCorrupted_Regular_Warrior.BP_Mob_SenkamatiCorrupted_Regular_Warrior_C" },
   { name = "Senkamati Hunter",  class = SC .. "Regular_Hunter/BP_Mob_SenkamatiCorrupted_Regular_Hunter.BP_Mob_SenkamatiCorrupted_Regular_Hunter_C" },
   { name = "Senkamati Caster",  class = SC .. "Regular_Shaman_Caster/BP_Mob_SenkamatiCorrupted_Regular_Shaman_Caster.BP_Mob_SenkamatiCorrupted_Regular_Shaman_Caster_C" },
+  -- Thrall (2026-10-02): the fourth Senkamati combat role. Note its Blueprint name has no "Regular_" prefix.
+  { name = "Senkamati Thrall",  class = SC .. "Regular_Thrall/BP_Mob_SenkamatiCorrupted_Thrall.BP_Mob_SenkamatiCorrupted_Thrall_C" },
 }
 
 Config.VERBOSE = false

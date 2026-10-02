@@ -3,17 +3,21 @@
 
 [size=4][b]What it does[/b][/size]
 [color=#D4D4D8]
-[b]Summon a ghost sailor (Home)[/b] — one random-look crew member (Buccaneers Musketeer, Sailor, Sergeant, a Brethren of the Coast woman, or the default Player Crew look) appears as a translucent ghost and starts following you at a jogging pace, matching your speed as you walk or sprint.
+[b]Summon a ghost sailor (Home)[/b] — one random-look crew member (Buccaneers Musketeer, Sailor, Sergeant, a Brethren of the Coast woman, or the default Player Crew look) appears as a translucent ghost and starts following you.
 
-[b]Summon a corrupted Senkamati ally (End)[/b] — one Senkamati (Warrior, Hunter, or Caster, picked at random) appears with the same ghostly look, genuinely friendly to you, and keeps its real native combat AI — it will actually fight hostiles alongside you, not just stand there.
+[b]Summon a corrupted Senkamati ally (End)[/b] — one Senkamati (Warrior, Hunter, Caster, or Thrall, picked at random) appears with the same ghostly look, genuinely friendly to you, and keeps its real native combat AI — it will actually fight hostiles alongside you, not just stand there. A Caster can pick targets and cast, and its totems belong to you.
 
-[b]They dissipate, they don't just vanish[/b] — after their lifetime runs out (120 seconds by default), a ghost plays a short dissipating-mist effect at its own feet before disappearing, instead of simply popping out of existence.
+[b]An optional Grenadier[/b] — turn on [i]Grenadier Summons[/i] and each Home press has a chance (10% by default, adjustable) to summon a Blackbeard Grenadier instead of a sailor. [b]Off by default[/b], because its grenades do a lot of damage, including to your own base.
 
-[b]A trailing ground light[/b] follows every summoned ghost, so you can track them at a glance even in a crowd or at range.
+[b]Never in your way[/b] — a summon that falls too far behind teleports back beside you, always [i]behind[/i] you, never in front. How far is a slider (10 to 500 m, default 30 m).
 
-[b]Capped, with a warning[/b] — up to 5 ghosts (sailors and Senkamati combined, configurable) can be active at once; summoning past the cap shows an on-screen "Max Ghosts Summoned" message instead of silently doing nothing.
+[b]They dissipate, they don't just vanish[/b] — after their lifetime runs out (120 seconds by default), every summon plays a short dissipating-mist effect at its own feet before disappearing, and an on-screen message tells you how many are left. If one falls in a fight, you get a message for that too.
 
-[b]Combat-aware following[/b] — a summoned ghost yields to its own combat AI the moment it's actually fighting something, and warps back to your side if it ever falls too far behind.
+[b]A trailing ground light[/b] follows every summoned ghost, so you can track them at a glance even in a crowd or at range. Prefer their normal look? Turn on [i]Disable Ghost Effect[/i] and summons keep their own appearance.
+
+[b]Capped, with a warning[/b] — up to 5 summons (sailors, Senkamati and Grenadiers combined, configurable) can be active at once; summoning past the cap shows an on-screen "Max Ghosts Summoned" message instead of silently doing nothing.
+
+[b]Combat-aware following[/b] — a summon yields to its own combat AI the moment it's actually fighting something.
 
 [b]Completely non-persistent by design[/b] — nothing this mod spawns is ever written to a save file. Reload the game and every ghost is gone, whether or not its timer had run out yet.
 [/color]
@@ -34,15 +38,21 @@ Optional: edit Scripts\config.lua (plain Lua, well-commented) to change lifetime
 
 [size=4][b]Controls[/b][/size]
 [color=#D4D4D8]
-Home — Summon one random-look ghost sailor
+Home — Summon one random-look ghost sailor (or a Grenadier, if enabled)
 End — Summon one corrupted Senkamati ally
 (Home and End sit right next to each other, by design.) Remap either in Scripts\config.lua (Config.SUMMON_KEY / Config.SENKAMATI_KEY), or via Windrose Mod Settings if installed (see below).
 [/color]
 
 [size=4][b]Optional: Windrose Mod Settings Support[/b][/size]
-[color=#D4D4D8]If you also have [url=https://www.nexusmods.com/windrose/mods/442][b]Windrose Mod Settings[/b][/url] by [url=https://www.nexusmods.com/windrose/users/77413713][b]IceBoxStudio[/b][/url] installed, this mod registers itself with it automatically. Both keys, the ghost lifetime (in seconds), the max-active cap, and the ground-light toggle all become editable from the game's native Settings > Mods screen.[/color]
+[color=#D4D4D8]If you also have [url=https://www.nexusmods.com/windrose/mods/442][b]Windrose Mod Settings[/b][/url] by [url=https://www.nexusmods.com/windrose/users/77413713][b]IceBoxStudio[/b][/url] installed, this mod registers itself with it automatically. From the game's native Settings > Mods screen you can change:
+[list]
+[*]Sliders: Ghost Lifetime (10–500 seconds), Teleport Distance (10–500 m), Max Simultaneous Ghosts (1–15), Grenadier Chance (1–50%).
+[*]Toggles: Ground Light Effect, Disable Ghost Effect, Grenadier Summons.
+[*]Keybinds: both summon keys.
+[/list]
+[b]Changes take effect after restarting the game.[/b][/color]
 
-[color=#D4D4D8]Entirely optional both directions: this mod works exactly the same without Windrose Mod Settings installed.[/color]
+[color=#D4D4D8]Entirely optional both directions: this mod works exactly the same without Windrose Mod Settings installed, using the values in Scripts\config.lua.[/color]
 
 [size=4][b]Requirements[/b][/size]
 [color=#D4D4D8]
@@ -57,6 +67,7 @@ End — Summon one corrupted Senkamati ally
 [size=4][b]Known Limitations[/b][/size]
 [color=#D4D4D8]
 [list]
+[*]Out of combat, summons walk at a fixed pace and cannot run to catch up — they teleport behind you instead (see Teleport Distance).
 [*]Because it's an unofficial mod, a game patch can change internal class/material paths and temporarily break the ghost look or a summon. Everything version-dependent lives in config.lua.
 [*]The Senkamati ally shares its faction copy with the friendly-faction technique this mod's sibling project (Living Base Enhanced) also uses — if a future game patch changes how NPC factions work, both mods would need the same fix.
 [/list]
@@ -77,7 +88,7 @@ Not permitted: reuploading or rehosting this mod — modified or unmodified — 
 Windrose and its game assets, class names, and IP belong to Kraken Express — this is an unofficial, unaffiliated mod.[/color]
 
 [size=4][b]Credits[/b][/size]
-[color=#D4D4D8]A spin-off of [url=https://www.nexusmods.com/windrose/mods/535][b]Living Base Enhanced[/b][/url], built by the same author — several techniques (the friendly-faction copy, the follow-at-heel AI, the on-screen toast notifications) were ported directly from that project's own codebase.
+[color=#D4D4D8]A spin-off of [url=https://www.nexusmods.com/windrose/mods/535][b]Living Base Enhanced[/b][/url], built by the same author — several techniques (the friendly-faction copy, the ghost look, the follow AI, the on-screen notifications) were ported directly from that project's own codebase.
 
 Thanks also to [url=https://www.nexusmods.com/windrose/users/77413713][b]IceBoxStudio[/b][/url] for [url=https://www.nexusmods.com/windrose/mods/442][b]Windrose Mod Settings[/b][/url], which this mod optionally integrates with for in-game configuration.
 

@@ -22,6 +22,7 @@
 local M = {}
 
 M.MOD_ID = "SummonGhostSailors"
+M.VERSION = "1.1.0"   -- keep equal to mod.txt
 local RS_ROOTS = { "ue4ss/Mods/R5ModSettings/", "Mods/R5ModSettings/" }
 
 local rsRootChecked, rsRoot = false, nil
@@ -74,8 +75,8 @@ function M.ToLivingBase(ueName) return UE_TO_LB[ueName] or ueName end
 -- `key` is both the R5ModSettings saved-value key AND the Config field name main.lua/config.lua
 -- reads it back into.
 M.KEYBIND_DEFS = {
-    { key = "SUMMON_KEY",    title = "Summon Ghost Sailor",     description = "Summons one random-look ghost sailor that follows you and despawns after GHOST_LIFETIME_MS. (Restart required to take effect.)" },
-    { key = "SENKAMATI_KEY", title = "Summon Senkamati Ally",   description = "Summons one corrupted Senkamati ally, friendly and fighting alongside you, permanent until you quit. (Restart required to take effect.)" },
+    { key = "SUMMON_KEY",    title = "Summon Ghost Sailor",     description = "Summons a ghost sailor that follows you and fights alongside you, then despawns after the ghost lifetime. (Optionally a Grenadier, see below.) Restart the game after changing." },
+    { key = "SENKAMATI_KEY", title = "Summon Senkamati Ally",   description = "Summons a corrupted Senkamati ally (Warrior, Hunter, Caster or Thrall) that fights alongside you, then despawns after the ghost lifetime. Restart the game after changing." },
 }
 
 -- RETRIED as real sliders (2026-08-26, RedFalcon: "can we not make them sliders to like 500
@@ -100,12 +101,16 @@ M.KEYBIND_DEFS = {
 -- a 500000-ms one, so the panel shows/saves SECONDS and ApplyOnce multiplies by `scale` back
 -- into Config. GHOST_MAX_ACTIVE has no scale (1:1, already a plain count).
 M.VALUE_DEFS = {
-    { key = "GHOST_LIFETIME_MS", title = "Ghost Lifetime (seconds)", description = "How long a summoned ghost lasts before despawning.", min = 10, max = 500, step = 1, scale = 1000 },
-    { key = "GHOST_MAX_ACTIVE",  title = "Max Simultaneous Ghosts",  description = "How many ghosts (sailors + Senkamati combined) can be active at once.", min = 1, max = 15, step = 1 },
+    { key = "GHOST_LIFETIME_MS", title = "Ghost Lifetime (seconds)", description = "How long every summon (sailors, Senkamati, Grenadier) lasts before it dissipates."..' Changes take effect after restarting the game.', min = 10, max = 500, step = 1, scale = 1000 },
+    { key = "FOLLOW_WARP_UU",    title = "Teleport Distance (m)",     description = "How far behind you a summon can fall before it teleports back beside you. Summons walk at a fixed slow pace out of combat, so lower values keep them close. Changes take effect after restarting the game.", min = 10, max = 500, step = 1, scale = 100 },
+    { key = "GHOST_MAX_ACTIVE",  title = "Max Simultaneous Ghosts",  description = "How many summons (sailors, Senkamati and Grenadiers combined) can be active at once."..' Changes take effect after restarting the game.'..'', min = 1, max = 15, step = 1 },
+    { key = "GRENADIER_CHANCE",  title = "Grenadier Chance (%)",      description = "Chance that a sailor summon is a Grenadier instead. Only used when Grenadier Summons is on."..' Changes take effect after restarting the game.', min = 1, max = 50, step = 1, scale = 0.01, float = true },
 }
 
 M.TOGGLE_DEFS = {
-    { key = "GHOST_FX_ENABLED", title = "Ground Light Effect", description = "Show the following ground-light effect under each ghost sailor." },
+    { key = "GHOST_FX_ENABLED", title = "Ground Light Effect", description = "Show the ground-light effect that follows each summon."..' Changes take effect after restarting the game.' },
+    { key = "DISABLE_GHOST_EFFECT", title = "Disable Ghost Effect", description = "When on, summons keep their normal look instead of being reskinned as ghosts. Off by default. Restart the game after changing." },
+    { key = "GRENADIER_ENABLED", title = "Grenadier Summons", description = "When on, a sailor summon can be a Grenadier instead (see Grenadier Chance). OFF by default: its grenades do a lot of damage, including to your own base. Restart the game after changing." },
 }
 
 local function is_identifier(s)
@@ -156,18 +161,19 @@ function M.WriteManifest(Config)
     if not root then return false end
 
     local settings = {}
+    for _, def in ipairs(M.VALUE_DEFS) do
+        local scale = def.scale or 1
+        local dflt = (Config[def.key] or 0) / scale
+        if def.float then dflt = math.floor(dflt + 0.5) end
+        settings[#settings + 1] = {
+            key = def.key, title = def.title, description = def.description, type = "slider",
+            default = dflt, min = def.min, max = def.max, step = def.step or 1,
+        }
+    end
     for _, def in ipairs(M.TOGGLE_DEFS) do
         settings[#settings + 1] = {
             key = def.key, title = def.title, description = def.description, type = "toggle",
             default = Config[def.key] and true or false,
-        }
-    end
-    for _, def in ipairs(M.VALUE_DEFS) do
-        local scale = def.scale or 1
-        settings[#settings + 1] = {
-            key = def.key, title = def.title, description = def.description, type = "slider",
-            default = (Config[def.key] or 0) / scale,
-            min = def.min, max = def.max, step = def.step or 1,
         }
     end
     for _, def in ipairs(M.KEYBIND_DEFS) do
@@ -183,7 +189,7 @@ function M.WriteManifest(Config)
         -- "SummonGhostSailors" (same pattern as LivingBase itself: internal folder "LivingBase",
         -- display "Living Base Enhanced") so the R5ModSettings install-check
         -- (mod_is_installed, keyed on the actual folder name) keeps working unchanged.
-        name = M.MOD_ID, display = "LBE: Summonable Ghost Fighters", version = "1.0.1",
+        name = M.MOD_ID, display = "LBE: Summonable Ghost Fighters", version = M.VERSION, nexus_id = "548",
         settings = settings,
     }
     local body = "-- Generated by SummonGhostSailors (modsettings.lua). Do not edit; regenerated on every mod load.\nreturn "
@@ -236,7 +242,8 @@ function M.ApplyOnce(Config)
             -- to snap on the UI side through this registration schema. Rounding here instead
             -- guarantees the value this mod actually USES is always a sane whole number,
             -- regardless of whatever fractional value the slider saved while being dragged.
-            Config[def.key] = math.floor(v * (def.scale or 1) + 0.5)
+            if def.float then Config[def.key] = v * (def.scale or 1)
+            else Config[def.key] = math.floor(v * (def.scale or 1) + 0.5) end
             applied = applied + 1
         end
     end

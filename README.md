@@ -2,7 +2,7 @@
 
 Source for **Summon Ghost Sailors**, a UE4SS Lua mod for [Windrose](https://store.steampowered.com/)
 (Kraken Express, UE 5.6, single-player). Summon a translucent ghost sailor or a corrupted Senkamati
-ally that follows and fights alongside you, then dissipates into mist a couple of minutes later —
+ally (or, optionally, a Grenadier) that follows and fights alongside you, then dissipates into mist a couple of minutes later —
 nothing it spawns is ever saved, so nothing lingers across a reload.
 
 This is a spin-off, standalone companion to
@@ -21,7 +21,7 @@ for anyone browsing the repo.
 ```
 R5/Binaries/Win64/ue4ss/Mods/SummonGhostSailors/
 ├── Scripts/
-│   ├── main.lua          entry point: key registration, the two summon flows, the shared cap
+│   ├── main.lua          entry point: key registration, the summon flows (sailor, Senkamati, Grenadier), the shared cap
 │   ├── config.lua        every tunable constant (keys, lifetimes, roster, material/FX paths)
 │   ├── spawner.lua        spawn plumbing, ghost material swap, friendly-faction copy, follow FX,
 │   │                     one-shot dissipate FX, a ported Toast (on-screen messages)

@@ -26,6 +26,27 @@ local function always(msg) print("[GhostSailors] " .. tostring(msg) .. "\n") end
 --------------------------------------------------------------------
 -- Class/asset resolution.
 --------------------------------------------------------------------
+-- AssetRegistry lookup (ported from LivingBase's resolveViaAssetRegistry): a plain LoadAsset does not
+-- always bring in a Blueprint class (the Blackbeard Grenadier never loaded that way), but
+-- AssetRegistryHelpers:GetAsset with the exact "<package>.<Name>_C" path returns it directly.
+local _assetRegistryHelpers = nil
+local function resolveViaAssetRegistry(path)
+    local packageName, assetName = path:match("^(.+)%.([^%.]+)$")
+    if not (packageName and assetName) then return nil end
+    if not _assetRegistryHelpers then
+        _assetRegistryHelpers = StaticFindObject("/Script/AssetRegistry.Default__AssetRegistryHelpers")
+    end
+    if not _assetRegistryHelpers then return nil end
+    local ok, result = pcall(function()
+        return _assetRegistryHelpers:GetAsset({
+            PackageName = UEHelpers.FindOrAddFName(packageName),
+            AssetName = UEHelpers.FindOrAddFName(assetName),
+        })
+    end)
+    if ok and result and result:IsValid() then return result end
+    return nil
+end
+
 local function resolveClass(path)
     local cls = StaticFindObject(path)
     if cls and cls:IsValid() then return cls end
@@ -35,8 +56,12 @@ local function resolveClass(path)
         cls = StaticFindObject(path)
         if cls and cls:IsValid() then return cls end
     end
+    local direct = resolveViaAssetRegistry(path)
+    if direct and direct:IsValid() then return direct end
     return nil
 end
+
+function Spawner.ResolveClass(path) return resolveClass(path) end
 
 local function resolveAsset(path)
     if not path then return nil end
@@ -64,7 +89,8 @@ end
 -- summon key — by the time they do, the assets have had real time to finish streaming in.
 function Spawner.Prewarm()
     local paths = {
-        Config.GHOST_SKIN_MAT_PATH, Config.GHOST_CLOTH_MAT_PATH, Config.GHOST_FX_PATH,
+        Config.GHOST_SKIN_MAT_PATH, Config.GHOST_CLOTH_MAT_PATH, Config.GHOST_HAIR_MAT_PATH,
+        Config.GHOST_ARMOR_MAT_PATH, Config.GRENADIER_CLASS, Config.GHOST_FX_PATH,
         Config.GHOST_DESPAWN_FX_PATH, Config.FRIENDLY_FACTION_ASSET,
     }
     for _, entry in ipairs(Config.SENKAMATI_ROSTER or {}) do
@@ -402,22 +428,30 @@ local function compFName(comp)
     return n
 end
 
+-- Ghost look = LivingBase's "Make Ghost" preset (2026-10-02, RedFalcon's revisit TODO 1), ported:
+--   body mesh: skin-family slot (_Small/_Medium/_Large) AND eye/mouth slots -> skin material (blank
+--   eyes, no floating teeth); any other body slot -> plain M_CharacterGhost_V2 (no glowing eyes).
+--   Head hair + Beard/Mustache/Whiskers/Eyebrows -> MI_Hair_Ghost. All other skeletal pieces
+--   (clothing/armor) and every static mesh (weapons/belt) -> MI_Boneman_Ghost_Spanish.
+-- Materials only, never mesh swaps -- the sailor keeps its own clothes.
+local FACIAL_TOKENS = { "Eyebrow", "Mustache", "Whiskers", "Beard" }
+
 function Spawner.ApplyGhostMaterial(actor)
     if not (actor and actor:IsValid()) then return false end
-    local skinMat = resolveAsset(Config.GHOST_SKIN_MAT_PATH)
-    local clothMat = resolveAsset(Config.GHOST_CLOTH_MAT_PATH)
-    if not (skinMat and skinMat:IsValid()) then
-        always("[ghost] could not resolve SKIN material: " .. tostring(Config.GHOST_SKIN_MAT_PATH))
-    end
-    if not (clothMat and clothMat:IsValid()) then
-        always("[ghost] could not resolve CLOTH material: " .. tostring(Config.GHOST_CLOTH_MAT_PATH))
-    end
-    if not (skinMat and skinMat:IsValid() and clothMat and clothMat:IsValid()) then
-        return false
+    if Config.DISABLE_GHOST_EFFECT then return true end   -- setting: leave the summon's own look alone
+    local skinMat  = resolveAsset(Config.GHOST_SKIN_MAT_PATH)
+    local baseMat  = resolveAsset(Config.GHOST_CLOTH_MAT_PATH)
+    local hairMat  = resolveAsset(Config.GHOST_HAIR_MAT_PATH)
+    local armorMat = resolveAsset(Config.GHOST_ARMOR_MAT_PATH)
+    for _, r in ipairs({ { skinMat, "SKIN", Config.GHOST_SKIN_MAT_PATH }, { baseMat, "BASE", Config.GHOST_CLOTH_MAT_PATH },
+                         { hairMat, "HAIR", Config.GHOST_HAIR_MAT_PATH }, { armorMat, "ARMOR", Config.GHOST_ARMOR_MAT_PATH } }) do
+        if not (r[1] and r[1]:IsValid()) then
+            always("[ghost] could not resolve " .. r[2] .. " material: " .. tostring(r[3]))
+            return false
+        end
     end
 
-    local function applySlots(comp, mat)
-        if not (comp and comp:IsValid() and mat and mat:IsValid()) then return 0 end
+    local function setAll(comp, mat)
         local n, ok_n = 0, 0
         pcall(function() n = comp:GetNumMaterials() end)
         for slot = 0, (n - 1) do
@@ -428,34 +462,68 @@ function Spawner.ApplyGhostMaterial(actor)
 
     local bodyMesh = unwrapComp(actor.Mesh)
     local bodyName = bodyMesh and compFName(bodyMesh) or nil
-    local skinSlots, clothSlots = 0, 0
-    if bodyMesh and bodyMesh:IsValid() then skinSlots = applySlots(bodyMesh, skinMat) end
-
-    for _, className in ipairs({ "StaticMeshComponent", "SkeletalMeshComponent" }) do
-        local cls = StaticFindObject("/Script/Engine." .. className)
-        if cls and cls:IsValid() then
-            local ok, comps = pcall(function() return actor:K2_GetComponentsByClass(cls) end)
-            if ok and comps then
-                local n = 0
-                pcall(function() n = comps:GetArrayNum() end)
-                if n == 0 then pcall(function() n = #comps end) end
-                for i = 1, n do
-                    local comp
-                    pcall(function() comp = comps[i] end)
-                    if not comp then pcall(function() comp = comps:Get(i) end) end
-                    comp = unwrapComp(comp)
-                    if comp and comp:IsValid() then
-                        local cn = compFName(comp)
-                        if not (bodyName and cn == bodyName) then
-                            clothSlots = clothSlots + applySlots(comp, clothMat)
-                        end
-                    end
-                end
+    local skinSlots, baseSlots, hairSlots, armorSlots = 0, 0, 0, 0
+    if bodyMesh and bodyMesh:IsValid() then
+        local n = 0
+        pcall(function() n = bodyMesh:GetNumMaterials() end)
+        for slot = 0, n - 1 do
+            local mat, matName = nil, ""
+            pcall(function() mat = bodyMesh:GetMaterial(slot) end)
+            if mat and mat:IsValid() then pcall(function() matName = mat:GetFName():ToString() end) end
+            local low = matName:lower()
+            local isSkin = matName:match("_Small$") or matName:match("_Medium$") or matName:match("_Large$")
+                or low:find("eye") ~= nil or low:find("mouth") ~= nil
+            local use = isSkin and skinMat or baseMat
+            if pcall(function() bodyMesh:SetMaterial(slot, use) end) then
+                if isSkin then skinSlots = skinSlots + 1 else baseSlots = baseSlots + 1 end
             end
         end
     end
-    log(string.format("[ghost] skin slots=%d, cloth slots=%d", skinSlots, clothSlots))
-    return (skinSlots + clothSlots) > 0
+
+    local function eachComp(className, fn)
+        local cls = StaticFindObject("/Script/Engine." .. className)
+        if not (cls and cls:IsValid()) then return end
+        local ok, comps = pcall(function() return actor:K2_GetComponentsByClass(cls) end)
+        if not (ok and comps) then return end
+        local n = 0
+        pcall(function() n = comps:GetArrayNum() end)
+        if n == 0 then pcall(function() n = #comps end) end
+        for i = 1, n do
+            local comp
+            pcall(function() comp = comps[i] end)
+            if not comp then pcall(function() comp = comps:Get(i) end) end
+            comp = unwrapComp(comp)
+            if comp and comp:IsValid() then fn(comp) end
+        end
+    end
+
+    eachComp("SkeletalMeshComponent", function(comp)
+        local cn = compFName(comp)
+        if bodyName and cn == bodyName then return end
+        local meshName, fullPath = "", ""
+        pcall(function()
+            local sk = comp.SkeletalMesh
+            if not (sk and sk:IsValid()) and comp.GetSkeletalMeshAsset then sk = comp:GetSkeletalMeshAsset() end
+            if sk and sk:IsValid() then
+                meshName = sk:GetFName():ToString()
+                pcall(function() fullPath = sk:GetFullName() end)
+            end
+        end)
+        local isHair = fullPath:find("/Hair/") ~= nil
+        if not isHair then
+            for _, tok in ipairs(FACIAL_TOKENS) do
+                if meshName:find(tok, 1, true) then isHair = true; break end
+            end
+        end
+        if isHair then hairSlots = hairSlots + setAll(comp, hairMat)
+        else armorSlots = armorSlots + setAll(comp, armorMat) end
+    end)
+    eachComp("StaticMeshComponent", function(comp)
+        armorSlots = armorSlots + setAll(comp, armorMat)
+    end)
+
+    log(string.format("[ghost] skin=%d base=%d hair=%d armor=%d", skinSlots, baseSlots, hairSlots, armorSlots))
+    return (skinSlots + baseSlots + hairSlots + armorSlots) > 0
 end
 
 --------------------------------------------------------------------
@@ -578,21 +646,24 @@ function Spawner.PlayOneShotFx(path, atLoc, lifetimeMs)
     -- so this sweeps every one-shot FX actor still tagged old enough to clear instead.
     if ExecuteWithDelay then
         ExecuteWithDelay(lifetimeMs or 3000, function()
-            pcall(function()
-                local list = FindAllOf and FindAllOf("NiagaraActor")
-                if not list then return end
-                local n = 0
-                pcall(function() n = list:GetArrayNum() end)
-                if n == 0 then pcall(function() n = #list end) end
-                for i = 1, n do
-                    local a = list[i]
-                    if not a then pcall(function() a = list:Get(i) end) end
-                    local isOurs = false
-                    pcall(function() isOurs = a.__ghostOneShot == true end)
-                    if isOurs and a and a:IsValid() then
-                        pcall(function() a:K2_DestroyActor() end)
+            -- Game thread (2026-10-02): FindAllOf + K2_DestroyActor must not run on the timer thread.
+            ExecuteInGameThread(function()
+                pcall(function()
+                    local list = FindAllOf and FindAllOf("NiagaraActor")
+                    if not list then return end
+                    local n = 0
+                    pcall(function() n = list:GetArrayNum() end)
+                    if n == 0 then pcall(function() n = #list end) end
+                    for i = 1, n do
+                        local a = list[i]
+                        if not a then pcall(function() a = list:Get(i) end) end
+                        local isOurs = false
+                        pcall(function() isOurs = a.__ghostOneShot == true end)
+                        if isOurs and a and a:IsValid() then
+                            pcall(function() a:K2_DestroyActor() end)
+                        end
                     end
-                end
+                end)
             end)
         end)
     end
@@ -633,6 +704,37 @@ function Spawner.MakeFriendly(actor)
     return ok
 end
 
+-- Spawner.SyncOwner(actor) -- the Caster fix (2026-10-02). A native Senkamati's R5AS_* targeting only
+-- tags a candidate as an enemy by deferring to its OWNER's relationships (R5AS_Categorizer_Relationship
+-- is hardcoded native), so a faction copy alone leaves it with no valid targets and the Caster never
+-- casts. Same recipe as LivingBase's whistle.lua totem fix, confirmed live there: copy the player's
+-- PlayerState.AccountData.AccountId onto OwnershipComponent.OwnerId, keep bShouldUseOwnerFaction,
+-- call OnRep_OwnerId(). A Caster's summoned totems then inherit the player as their owner too.
+function Spawner.SyncOwner(actor)
+    if not (actor and actor:IsValid()) then return false end
+    local oc = nil
+    pcall(function() oc = actor.OwnershipComponent end)
+    if not (oc and oc:IsValid()) then
+        log("[owner] no OwnershipComponent on " .. tostring(actor:GetFName():ToString()))
+        return false
+    end
+    local ownerId = nil
+    pcall(function()
+        local pc = UEHelpers.GetPlayerController()
+        local ps = pc and pc:IsValid() and pc.PlayerState
+        if ps and ps:IsValid() then ownerId = ps.AccountData.AccountId end
+    end)
+    if not ownerId then
+        log("[owner] sync skipped -- could not read PlayerState.AccountData.AccountId")
+        return false
+    end
+    local wOk = pcall(function() oc.OwnerId = ownerId end)
+    pcall(function() oc.bShouldUseOwnerFaction = true end)
+    local rOk = pcall(function() oc:OnRep_OwnerId() end)
+    log(string.format("[owner] OwnerId synced (write=%s, OnRep_OwnerId=%s)", tostring(wOk), tostring(rOk)))
+    return wOk
+end
+
 --------------------------------------------------------------------
 -- On-screen messages — ported near-verbatim from LivingBase's own Spawner.Toast. Splices a
 -- plain TextBlock into the game's native WBP_SideNotificationsContainer_C via AddChild, rather
@@ -642,7 +744,7 @@ end
 --------------------------------------------------------------------
 Spawner._activeToasts = Spawner._activeToasts or {}
 local toastTickerStarted = false
-local function toastTick()
+local function toastBody()
     local now = os.time()
     local lastContainer
     for i = #Spawner._activeToasts, 1, -1 do
@@ -660,6 +762,10 @@ local function toastTick()
             lastContainer:SetVisibility(ESlateVisibility and ESlateVisibility.Collapsed or 1)
         end)
     end
+end
+-- The widget work runs on the game thread; the reschedule is a sibling call, not nested inside it.
+local function toastTick()
+    if ExecuteInGameThread then ExecuteInGameThread(function() pcall(toastBody) end) else pcall(toastBody) end
     if ExecuteWithDelay then ExecuteWithDelay(500, toastTick) end
 end
 local function ensureToastTicker()

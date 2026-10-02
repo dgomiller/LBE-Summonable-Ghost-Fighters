@@ -2,6 +2,40 @@ LBE: Summonable Ghost Fighters — Changelog
 (internal mod folder/id: SummonGhostSailors)
 
 ====================================================================
+1.1.0 (2026-10-02)
+====================================================================
+ADDED
+- Thrall joins the Senkamati roster (End now summons a Warrior, Hunter, Caster or Thrall).
+- Optional Grenadier: when "Grenadier Summons" is on, a Home press has a chance (10% by default,
+  a slider in Settings > Mods) to summon a Blackbeard Grenadier instead of a sailor. OFF by
+  default because its grenades do heavy damage.
+- New setting "Disable Ghost Effect" (off by default): summons keep their normal look instead of
+  the ghost reskin.
+- New "Teleport Distance (m)" slider (10 to 500 m, default 30 m): a summon that falls this far
+  behind teleports back beside you. It now always lands behind you, never in front.
+- On-screen messages when a summon dissipates or falls in a fight, with how many are left
+  (Config.DESPAWN_NOTIFY).
+
+CHANGED
+- The ghost look now matches Living Base Enhanced's "Make Ghost" preset (ghost skin, hair and
+  armor materials; blank eyes and mouth).
+- Senkamati allies and Grenadiers get their owner set to you, so a Caster can pick targets and
+  cast and its totems belong to you.
+- Out of combat, summons walk at a fixed pace whatever speed is set, so the follow-speed tuning
+  is switched off and the teleport does the catching up.
+- A new summon is left completely alone for its first 3 seconds while it finishes building.
+- Every summon (sailor, Senkamati, Grenadier) expires after the ghost lifetime and counts toward
+  the shared cap.
+- Settings > Mods now lists sliders, then toggles, then keybinds, with fuller descriptions.
+  Every change there needs a game restart. Registered with the mod's Nexus page (548).
+
+FIXED
+- Stability: the follow, teleport, despawn and message code now run on the game thread (a crash
+  was seen at the first despawn when this work ran on a timer thread).
+- The Grenadier now loads reliably (its class is loaded through the asset registry and the
+  summon waits for it).
+
+====================================================================
 1.0.1 (2026-08-26) — Windrose Mod Settings slider fix
 ====================================================================
 - Fixed: the Ghost Lifetime / Max Simultaneous Ghosts sliders in Settings > Mods now use the

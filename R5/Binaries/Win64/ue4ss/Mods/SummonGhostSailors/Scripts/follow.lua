@@ -137,6 +137,14 @@ local function warpNear(pawn, target, radius, index, total)
     return pcall(function()
         local p = target:K2_GetActorLocation()
         local ang = (2 * math.pi) * ((index or 1) - 1) / math.max(total or 1, 1)
+        if Config.FOLLOW_WARP_BEHIND ~= false then
+            -- Land BEHIND the player (never in front, where they block the view / path): centre on the
+            -- opposite of the player's facing, fanned out +/-30 deg per extra summon (capped at +/-75).
+            local yaw = 0.0
+            pcall(function() yaw = target:K2_GetActorRotation().Yaw end)
+            local fan = math.max(-75.0, math.min(75.0, ((index or 1) - ((total or 1) + 1) / 2) * 30.0))
+            ang = math.rad(yaw + 180.0 + fan)
+        end
         pawn:K2_SetActorLocation({
             X = p.X + math.cos(ang) * (radius or 500.0),
             Y = p.Y + math.sin(ang) * (radius or 500.0),
@@ -182,6 +190,48 @@ function Follow.Reset()
 end
 
 --------------------------------------------------------------------
+-- Telemetry (Config.FOLLOW_DEBUG): a compact snapshot of the state that might distinguish the
+-- walk gait (speed capped at 220) from the post-combat run gait (400-500). Every read is pcall'd.
+--------------------------------------------------------------------
+function Follow.StateSnapshot(actor)
+    local parts = {}
+    local function add(name, fn)
+        local v = nil
+        pcall(function() v = fn() end)
+        parts[#parts + 1] = name .. "=" .. tostring(v)
+    end
+    local anim = nil
+    pcall(function()
+        local mesh = actor.Mesh
+        anim = mesh and mesh:IsValid() and mesh:GetAnimInstance() or nil
+        if anim and not anim:IsValid() then anim = nil end
+    end)
+    if anim then
+        add("CombatState", function() return anim.CombatState end)
+        add("CombatMovement", function() return anim.CombatMovement end)
+        add("ShouldMove", function() return anim.ShouldMove end)
+        add("FWD", function() return anim.FWD end)
+        add("AimMove", function() return anim.AimMove end)
+        add("WantFwd", function() return anim["Want Forward Speed"] end)
+        add("GroundSpeed", function() return string.format("%.0f", anim.GroundSpeed) end)
+    else
+        parts[#parts + 1] = "anim=nil"
+    end
+    add("MoveMode", function() return actor.CharacterMovement.MovementMode end)
+    add("MaxAccel", function() return actor.CharacterMovement.MaxAcceleration end)
+    add("ReqMaxSpd", function() return actor.CharacterMovement.bRequestedMoveWithMaxSpeed end)
+    add("PathLeft", function()
+        local nav = mercunaNav(actor)
+        return nav and string.format("%.0f", nav:GetRemainingPathLength()) or "nonav"
+    end)
+    add("Focus", function()
+        local f = actor.Controller:GetFocusActor()
+        return (f and f:IsValid()) and f:GetFName():ToString() or "none"
+    end)
+    return table.concat(parts, " ")
+end
+
+--------------------------------------------------------------------
 -- One shared per-tick decision loop: follow, yield to combat, warp back, or despawn.
 --------------------------------------------------------------------
 local function tickOnce()
@@ -214,6 +264,12 @@ local function tickOnce()
         if not (actor and actor:IsValid()) then
             if rec.fx and rec.fx:IsValid() then pcall(function() rec.fx:K2_DestroyActor() end) end
             table.remove(Follow.active, i)
+            -- The actor vanished without us despawning it (killed and cleaned up, or removed by the game).
+            if Config.DESPAWN_NOTIFY ~= false then
+                local left = #Follow.active
+                local msg = tostring(rec.label) .. " fell — " .. (left > 0 and (tostring(left) .. " left") or "none left")
+                pcall(function() Spawner.Toast(msg, 3.0) end)
+            end
         elseif (not rec.permanent) and (now - rec.spawnedAt) * 1000 >= Config.GHOST_LIFETIME_MS then
             local dieLoc = nil
             pcall(function() dieLoc = actor:K2_GetActorLocation() end)
@@ -224,6 +280,14 @@ local function tickOnce()
             if rec.fx and rec.fx:IsValid() then pcall(function() rec.fx:K2_DestroyActor() end) end
             table.remove(Follow.active, i)
             log(rec.label .. " expired (120s) — despawned")
+            if Config.DESPAWN_NOTIFY ~= false then
+                local left = #Follow.active
+                local msg = tostring(rec.label) .. " dissipated — " .. (left > 0 and (tostring(left) .. " left") or "none left")
+                pcall(function() Spawner.Toast(msg, 3.0) end)
+            end
+        elseif (now - rec.spawnedAt) < (Config.FOLLOW_GRACE_S or 3.0) then
+            -- Brand-new summon: its composite mesh/clothing is still being (re)built for a couple of
+            -- seconds. Touch nothing (no anim/nav/movement reads or writes) until it settles.
         elseif player and ploc then
             local cloc = nil
             pcall(function() cloc = actor:K2_GetActorLocation() end)
@@ -240,9 +304,27 @@ local function tickOnce()
                     if rec.follow.logicStopped then setAILogic(actor, true); rec.follow.logicStopped = false end
                 elseif d > Config.FOLLOW_START_UU then
                     if paceSpeed then setMaxWalkSpeed(actor, paceSpeed) end
+                    rec.boostSpeed = paceSpeed
                     setSpeedMultiplier(actor, Config.FOLLOW_SPEED_MULT)
                     follow(actor, player, rec.follow)
+                    if Config.FOLLOW_DEBUG then
+                        local mws, spd = -1, -1
+                        pcall(function() mws = actor.CharacterMovement.MaxWalkSpeed end)
+                        pcall(function() local v = actor:GetVelocity(); spd = math.sqrt((v.X or 0) ^ 2 + (v.Y or 0) ^ 2) end)
+                        print(string.format("[GhostSailors:FollowDbg] %s dist=%.0f want=%.0f MaxWalkSpeed(readback)=%.0f speed=%.0f fastChecks=%d reverted=%d lastSeenWhenReverted=%s\n",
+                            tostring(rec.label), d, paceSpeed or -1, mws, spd, rec.fastN or 0, rec.reverts or 0, tostring(rec.lastSeen)))
+                        rec.fastN, rec.reverts = 0, 0
+                        local snap = Follow.StateSnapshot(actor)
+                        print("[GhostSailors:FollowState] " .. tostring(rec.label) .. " " .. snap .. "\n")
+                        local running = spd >= 300
+                        if rec.wasRunning ~= nil and rec.wasRunning ~= running then
+                            print("[GhostSailors:FollowDbg] *** " .. tostring(rec.label) .. (running and " RUN STATE ON" or " RUN STATE OFF")
+                                .. " (speed " .. string.format("%.0f", spd) .. ") " .. snap .. "\n")
+                        end
+                        rec.wasRunning = running
+                    end
                 else
+                    rec.boostSpeed = nil
                     if rec.follow.tracking then
                         local nav = mercunaNav(actor)
                         if nav then pcall(function() nav:Stop() end) end
@@ -256,13 +338,46 @@ local function tickOnce()
     end
 end
 
+-- Fast pass (2026-10-02): the game rewrites CharacterMovement.MaxWalkSpeed to its walk value (110) for
+-- non-combat movement (the combat run sets 500 -- confirmed from probe dumps), so a once-per-200ms write is
+-- overridden most of the time. While a summon is far behind, re-assert the boosted value every
+-- Config.FOLLOW_FAST_MS between full ticks. Also counts how often the game had reverted it (telemetry).
+function Follow.FastAssert()
+    for _, rec in ipairs(Follow.active) do
+        local a = rec.actor
+        if rec.boostSpeed and a and a:IsValid() then
+            local cur = nil
+            pcall(function() cur = a.CharacterMovement.MaxWalkSpeed end)
+            rec.fastN = (rec.fastN or 0) + 1
+            if cur and math.abs(cur - rec.boostSpeed) > 1.0 then
+                rec.reverts = (rec.reverts or 0) + 1
+                rec.lastSeen = cur
+            end
+            setMaxWalkSpeed(a, rec.boostSpeed)
+        end
+    end
+end
+
 function Follow.StartTick()
     if Follow._ticking then return end
     Follow._ticking = true
     local function step()
-        pcall(tickOnce)
+        local now = os.clock()
+        -- All the engine work (follow, teleport, destroy on expiry, FX) runs on the GAME thread
+        -- (2026-10-02, after a crash at the first despawn); this timer thread only schedules.
+        -- The next ExecuteWithDelay below is a sibling of this call, never nested inside it.
+        local full = (now - (Follow._lastFull or 0)) * 1000 >= (Config.GHOST_TICK_MS - 5)
+        if full then Follow._lastFull = now end
+        local work = full and tickOnce or Follow.FastAssert
+        if ExecuteInGameThread then
+            ExecuteInGameThread(function() pcall(work) end)
+        else
+            pcall(work)
+        end
         if #Follow.active > 0 and ExecuteWithDelay then
-            ExecuteWithDelay(Config.GHOST_TICK_MS, step)
+            local boosting = false
+            for _, rec in ipairs(Follow.active) do if rec.boostSpeed then boosting = true; break end end
+            ExecuteWithDelay(boosting and (Config.FOLLOW_FAST_MS or 50) or Config.GHOST_TICK_MS, step)
         else
             Follow._ticking = false
         end
